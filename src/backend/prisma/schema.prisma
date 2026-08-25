@@ -1,0 +1,56 @@
+// Prisma Schema for Capital FM Mobile App Backend Gateway
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Subscribed User Profile for server-side persistence
+model User {
+  id        String         @id @default(uuid())
+  email     String         @unique
+  username  String?        // Optional nickname for personalized greeting
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  favorites UserFavorite[]
+
+  @@map("users")
+}
+
+/// Server-synced favorites for subscribed users
+model UserFavorite {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemType  String   @map("item_type") // e.g. "article", "show", "podcast"
+  itemId    String   @map("item_id")
+  metadata  Json?    // Optional extra payload (title, image URL, category)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, itemType, itemId])
+  @@map("user_favorites")
+}
+
+/// Cached and Indexed Articles for Near Realtime Full-Text Search
+model Article {
+  id           Int      @id // WordPress Post ID
+  slug         String   @unique
+  title        String
+  excerpt      String?
+  content      String   // Sanitized body text
+  categorySlug String   @map("category_slug")
+  author       String?
+  coverImageUrl String? @map("cover_image_url")
+  publishedAt  DateTime @map("published_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([categorySlug])
+  @@index([publishedAt])
+  @@map("articles")
+}

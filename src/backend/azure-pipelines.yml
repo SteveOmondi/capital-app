@@ -1,0 +1,119 @@
+# Azure DevOps CI/CD Pipeline for Capital FM Backend Gateway
+# Target Compute: Azure Container Apps (ACA) - Scale-to-Zero ($0.00 - $5.00/month)
+# Container Registry: Docker Hub
+
+trigger:
+  branches:
+    include:
+      - main
+      - master
+  paths:
+    include:
+      - capital-app/src/backend/**
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # Azure DevOps Service Connections
+  dockerHubServiceConnection: 'DockerHub-ServiceConnection'
+  azureServiceConnection: 'Azure-Subscription-ServiceConnection'
+
+  # Docker Hub Repository
+  dockerHubUsername: 'stephenomondi'
+  imageRepository: 'capitalfm-backend'
+
+  # Azure Container App Deployment
+  resourceGroup: 'rg-capitalfm-prod'
+  containerAppName: 'ca-capitalfm-backend-api'
+  location: 'eastus'
+
+stages:
+  # =========================================================================
+  # STAGE 1: Continuous Integration (Test & Build)
+  # =========================================================================
+  - stage: TestAndBuild
+    displayName: '1. Test & Build (CI)'
+    jobs:
+      - job: TestAndBuildJob
+        displayName: 'Run Tests & Compile TypeScript'
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '18.x'
+            displayName: 'Install Node.js 18.x'
+
+          - script: |
+              cd capital-app/src/backend
+              npm ci
+            displayName: 'Install Dependencies'
+
+          - script: |
+              cd capital-app/src/backend
+              npx prisma generate
+            displayName: 'Generate Prisma Client'
+
+          - script: |
+              cd capital-app/src/backend
+              npx tsc --noEmit
+            displayName: 'Check TypeScript Compilation'
+
+          - script: |
+              cd capital-app/src/backend
+              npm test
+            displayName: 'Execute Jest Test Suite'
+
+  # =========================================================================
+  # STAGE 2: Build & Push Docker Image to Docker Hub
+  # =========================================================================
+  - stage: DockerBuildAndPush
+    displayName: '2. Docker Build & Push (Docker Hub)'
+    dependsOn: TestAndBuild
+    condition: succeeded()
+    jobs:
+      - job: DockerJob
+        displayName: 'Build & Push Docker Image'
+        steps:
+          - task: Docker@2
+            displayName: 'Login to Docker Hub'
+            inputs:
+              command: 'login'
+              containerRegistry: '$(dockerHubServiceConnection)'
+
+          - task: Docker@2
+            displayName: 'Build and Push Docker Image'
+            inputs:
+              command: 'buildAndPush'
+              repository: '$(dockerHubUsername)/$(imageRepository)'
+              dockerfile: '$(Build.SourcesDirectory)/capital-app/src/backend/Dockerfile'
+              buildContext: '$(Build.SourcesDirectory)/capital-app/src/backend'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+  # =========================================================================
+  # STAGE 3: Deploy to Azure Container Apps (CD)
+  # =========================================================================
+  - stage: DeployToAzureContainerApps
+    displayName: '3. Deploy to Azure Container Apps'
+    dependsOn: DockerBuildAndPush
+    condition: succeeded()
+    jobs:
+      - job: DeployJob
+        displayName: 'Update Azure Container App Revision'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Deploy Container Image to Azure Container Apps'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Installing containerapp extension..."
+                az extension add --name containerapp --upgrade
+
+                echo "Updating Azure Container App $(containerAppName)..."
+                az containerapp update \
+                  --name $(containerAppName) \
+                  --resource-group $(resourceGroup) \
+                  --image $(dockerHubUsername)/$(imageRepository):$(Build.BuildId)

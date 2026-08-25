@@ -1,0 +1,254 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Capital FM Mobile Ecosystem - Node.js Backend Gateway",
+    "description": "Production-ready Backend-for-Frontend (BFF) API Gateway for Capital FM Kenya mobile application.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Stephen Omondi",
+      "email": "backend@capitalfm.africa"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Liveness Probe",
+        "description": "Returns HTTP 200 OK with server uptime metrics.",
+        "responses": {
+          "200": {
+            "description": "Server is alive and operational."
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "summary": "Readiness Probe",
+        "description": "Monitors downstream PostgreSQL and Redis connection health.",
+        "responses": {
+          "200": {
+            "description": "All downstream database and cache services are healthy."
+          },
+          "503": {
+            "description": "Degraded state. Database or Redis unreachable."
+          }
+        }
+      }
+    },
+    "/api/v1/news": {
+      "get": {
+        "summary": "WordPress News Articles Gateway",
+        "description": "Returns sanitized news articles with category filtering, pagination, and PostgreSQL Full-Text Search.",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "default": "all" },
+            "description": "Category slug (e.g. news, sports, lifestyle, entertainment)"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 10 }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Full-text search query term"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of sanitized articles."
+          }
+        }
+      }
+    },
+    "/api/v1/podcasts": {
+      "get": {
+        "summary": "Podcast RSS Feed & Episodes",
+        "description": "Extracts podcast metadata and audio enclosure MP3 links from RSS feed.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 10 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Podcast channel payload with episode audio links."
+          }
+        }
+      }
+    },
+    "/api/v1/schedules": {
+      "get": {
+        "summary": "Weekly Radio Show Schedules",
+        "description": "Returns radio show airtime slots, presenter profiles, and real-time live show indicator.",
+        "parameters": [
+          {
+            "name": "day",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Day of week (monday, tuesday, etc.)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Weekly show schedule payload."
+          }
+        }
+      }
+    },
+    "/api/v1/stream/config": {
+      "get": {
+        "summary": "Live Stream Resolution Config",
+        "description": "Returns primary 128kbps HLS URL, low-data 64kbps HE-AACv2 fallback URL, and ICY audio endpoint.",
+        "responses": {
+          "200": {
+            "description": "Audio stream configuration payload."
+          }
+        }
+      }
+    },
+    "/api/v1/stream/nowplaying": {
+      "get": {
+        "summary": "Live Now Playing Track & Album Art",
+        "description": "Parses live ICY track metadata and returns 600x600 iTunes album artwork.",
+        "responses": {
+          "200": {
+            "description": "Currently playing track metadata payload."
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/register": {
+      "post": {
+        "summary": "Register FCM Device Token & Topics",
+        "description": "Subscribes device tokens to breaking news, podcast upload, and favorite show topics.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": { "type": "string" },
+                  "topics": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "action": { "type": "string", "enum": ["subscribe", "unsubscribe"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Topic registration success response."
+          }
+        }
+      }
+    },
+    "/api/v1/user/profile": {
+      "post": {
+        "summary": "Subscribe / Register User Profile",
+        "description": "Upserts subscribed user profile (email + optional username) and returns welcome greeting.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string" },
+                  "username": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User profile DTO with welcome message."
+          }
+        }
+      }
+    },
+    "/api/v1/user/favorites": {
+      "get": {
+        "summary": "Fetch Persisted Server Favorites",
+        "security": [{ "UserEmailHeader": [] }],
+        "responses": {
+          "200": {
+            "description": "List of user saved favorites."
+          }
+        }
+      },
+      "post": {
+        "summary": "Save Item to Server Favorites",
+        "security": [{ "UserEmailHeader": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "itemType": { "type": "string" },
+                  "itemId": { "type": "string" },
+                  "metadata": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Favorite item saved."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "UserEmailHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-User-Email"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}
