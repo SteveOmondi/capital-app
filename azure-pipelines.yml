@@ -17,15 +17,15 @@ variables:
   # Go to Azure DevOps -> Project Settings -> Service connections to find your exact names.
   # =========================================================================
   dockerHubServiceConnection: 'DockerHub-ServiceConnection'
-  azureServiceConnection: 'Azure-Subscription-ServiceConnection'
+  azureServiceConnection: 'Azure-StayHere-Conn'
 
   # Docker Hub Credentials & Image Config
-  dockerHubUsername: 'steveomondi'
+  dockerHubUsername: 'jimane254'
   imageRepository: 'capital-app'
 
   # Azure Resource Names
-  resourceGroup: 'rg-capitalfm-prod'
-  containerAppName: 'ca-capitalfm-backend-api'
+  resourceGroup: 'rg-capital-prod'
+  containerAppName: 'ca-capital-backend-api'
 
 stages:
   # =========================================================================
