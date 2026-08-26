@@ -77,6 +77,11 @@ stages:
               REDIS_PORT: $(REDIS_PORT)
               REDIS_PASSWORD: $(REDIS_PASSWORD)
               WP_WEBHOOK_SECRET: $(WP_WEBHOOK_SECRET)
+              WP_CMS_BASE_URL: $(WP_CMS_BASE_URL)
+              PODCAST_RSS_URL: $(PODCAST_RSS_URL)
+              LIVE_STREAM_PRIMARY_URL: $(LIVE_STREAM_PRIMARY_URL)
+              LIVE_STREAM_FALLBACK_URL: $(LIVE_STREAM_FALLBACK_URL)
+              ICY_STREAM_URL: $(ICY_STREAM_URL)
             displayName: 'Execute Jest Test Suite'
 
   # =========================================================================
