@@ -133,6 +133,9 @@ stages:
                 echo "Installing containerapp extension..."
                 az extension add --name containerapp --upgrade
 
+                echo "Ensuring Resource Group $(resourceGroup) exists..."
+                az group create --name $(resourceGroup) --location "eastus"
+
                 echo "Checking if Azure Container App $(containerAppName) exists in $(resourceGroup)..."
                 if az containerapp show --name $(containerAppName) --resource-group $(resourceGroup) &>/dev/null; then
                   echo "Updating existing Azure Container App $(containerAppName)..."
