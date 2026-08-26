@@ -121,7 +121,7 @@ stages:
     condition: succeeded()
     jobs:
       - job: DeployJob
-        displayName: 'Update Azure Container App Revision'
+        displayName: 'Update / Provision Azure Container App'
         steps:
           - task: AzureCLI@2
             displayName: 'Deploy Container Image to Azure Container Apps'
@@ -133,8 +133,45 @@ stages:
                 echo "Installing containerapp extension..."
                 az extension add --name containerapp --upgrade
 
-                echo "Updating Azure Container App $(containerAppName)..."
-                az containerapp update \
-                  --name $(containerAppName) \
-                  --resource-group $(resourceGroup) \
-                  --image $(dockerHubUsername)/$(imageRepository):$(Build.BuildId)
+                echo "Checking if Azure Container App $(containerAppName) exists in $(resourceGroup)..."
+                if az containerapp show --name $(containerAppName) --resource-group $(resourceGroup) &>/dev/null; then
+                  echo "Updating existing Azure Container App $(containerAppName)..."
+                  az containerapp update \
+                    --name $(containerAppName) \
+                    --resource-group $(resourceGroup) \
+                    --image $(dockerHubUsername)/$(imageRepository):$(Build.BuildId)
+                else
+                  echo "Container app $(containerAppName) does not exist. Creating new Container App..."
+                  ENV_NAME="env-$(resourceGroup)"
+                  if ! az containerapp env show --name $ENV_NAME --resource-group $(resourceGroup) &>/dev/null; then
+                    echo "Creating Container Apps Managed Environment $ENV_NAME..."
+                    az containerapp env create \
+                      --name $ENV_NAME \
+                      --resource-group $(resourceGroup) \
+                      --location "eastus"
+                  fi
+
+                  az containerapp create \
+                    --name $(containerAppName) \
+                    --resource-group $(resourceGroup) \
+                    --environment $ENV_NAME \
+                    --image $(dockerHubUsername)/$(imageRepository):$(Build.BuildId) \
+                    --target-port 3000 \
+                    --ingress external \
+                    --min-replicas 0 \
+                    --max-replicas 5 \
+                    --env-vars \
+                      NODE_ENV=production \
+                      PORT=3000 \
+                      LOG_LEVEL=info \
+                      DATABASE_URL="$(DATABASE_URL)" \
+                      REDIS_HOST="$(REDIS_HOST)" \
+                      REDIS_PORT="$(REDIS_PORT)" \
+                      REDIS_PASSWORD="$(REDIS_PASSWORD)" \
+                      WP_WEBHOOK_SECRET="$(WP_WEBHOOK_SECRET)" \
+                      WP_CMS_BASE_URL="$(WP_CMS_BASE_URL)" \
+                      PODCAST_RSS_URL="$(PODCAST_RSS_URL)" \
+                      LIVE_STREAM_PRIMARY_URL="$(LIVE_STREAM_PRIMARY_URL)" \
+                      LIVE_STREAM_FALLBACK_URL="$(LIVE_STREAM_FALLBACK_URL)" \
+                      ICY_STREAM_URL="$(ICY_STREAM_URL)"
+                fi
