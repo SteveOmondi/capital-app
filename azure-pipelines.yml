@@ -11,18 +11,30 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
 
+# =========================================================================
+# Azure DevOps Variable Group & Pipeline Variables
+# Configure Variable Group 'capital-app-vg' under Pipelines -> Library in Azure DevOps
+# =========================================================================
 variables:
-  # Service Connection Names matching Azure DevOps UI
-  dockerHubServiceConnection: 'DockerHub-ServiceConnection'
-  azureServiceConnection: 'Azure-StayHere-Conn'
+  - group: capital-app-vg # Azure DevOps Library Variable Group name
+
+  # Service Connection Names
+  - name: dockerHubServiceConnection
+    value: 'DockerHub-ServiceConnection'
+  - name: azureServiceConnection
+    value: 'Azure-StayHere-Conn'
 
   # Docker Hub Credentials & Image Config
-  dockerHubUsername: 'jimane254'
-  imageRepository: 'capital-app'
+  - name: dockerHubUsername
+    value: 'jimane254'
+  - name: imageRepository
+    value: 'capital-app'
 
   # Azure Resource Names
-  resourceGroup: 'rg-capital-prod'
-  containerAppName: 'ca-capital-backend-api'
+  - name: resourceGroup
+    value: 'rg-capital-prod'
+  - name: containerAppName
+    value: 'ca-capital-backend-api'
 
 stages:
   # =========================================================================
@@ -48,7 +60,7 @@ stages:
               cd src/backend
               npx prisma generate
             env:
-              DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/capitalfm_db?schema=public'
+              DATABASE_URL: $(DATABASE_URL)
             displayName: 'Generate Prisma Client'
 
           - script: |
@@ -60,10 +72,10 @@ stages:
               cd src/backend
               npm test
             env:
-              DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/capitalfm_db?schema=public'
-              REDIS_HOST: '127.0.0.1'
-              REDIS_PORT: '6379'
-              WP_WEBHOOK_SECRET: 'capital_fm_secret_webhook_key_2026'
+              DATABASE_URL: $(DATABASE_URL)
+              REDIS_HOST: $(REDIS_HOST)
+              REDIS_PORT: $(REDIS_PORT)
+              WP_WEBHOOK_SECRET: $(WP_WEBHOOK_SECRET)
             displayName: 'Execute Jest Test Suite'
 
   # =========================================================================
