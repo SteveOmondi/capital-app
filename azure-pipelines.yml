@@ -12,10 +12,7 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  # =========================================================================
-  # ⚠️ SERVICE CONNECTION NAMES (Update these to match your Azure DevOps UI)
-  # Go to Azure DevOps -> Project Settings -> Service connections to find your exact names.
-  # =========================================================================
+  # Service Connection Names matching Azure DevOps UI
   dockerHubServiceConnection: 'DockerHub-ServiceConnection'
   azureServiceConnection: 'Azure-StayHere-Conn'
 
