@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { getArticles } from '../services/wordpressService';
+import { getArticles, getNewsCategories } from '../services/wordpressService';
 
 export async function getNewsHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -13,6 +13,21 @@ export async function getNewsHandler(req: Request, res: Response, next: NextFunc
     res.status(200).json({
       status: 'success',
       data,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCategoriesHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const categories = await getNewsCategories();
+    res.status(200).json({
+      status: 'success',
+      data: {
+        total: categories.length,
+        categories,
+      },
     });
   } catch (error) {
     next(error);

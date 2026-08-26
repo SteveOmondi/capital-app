@@ -17,6 +17,18 @@ describe('News API Integration Tests', () => {
     }
   });
 
+  it('GET /api/v1/news/categories should return 200 OK with categories array', async () => {
+    const response = await request(app).get('/api/v1/news/categories');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('status', 'success');
+    expect(response.body.data).toHaveProperty('categories');
+    expect(Array.isArray(response.body.data.categories)).toBe(true);
+    expect(response.body.data.categories.length).toBeGreaterThan(0);
+    expect(response.body.data.categories[0]).toHaveProperty('slug');
+    expect(response.body.data.categories[0]).toHaveProperty('name');
+  });
+
   it('GET /api/v1/news should return 200 OK with news array structure', async () => {
     const response = await request(app).get('/api/v1/news?page=1&limit=5');
 

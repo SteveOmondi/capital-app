@@ -17,12 +17,30 @@ export interface ArticleDTO {
   publishedAtTimestamp: number;
 }
 
+export interface CategoryDTO {
+  id: number;
+  name: string;
+  slug: string;
+  count: number;
+  description?: string;
+}
+
 export interface FetchArticlesQuery {
   category?: string;
   page?: number;
   limit?: number;
   search?: string;
 }
+
+const DEFAULT_CATEGORIES: CategoryDTO[] = [
+  { id: 1, name: 'News', slug: 'news', count: 450, description: 'Latest breaking news and national updates' },
+  { id: 2, name: 'Sports', slug: 'sports', count: 210, description: 'Football, athletics and sports coverage' },
+  { id: 3, name: 'Business', slug: 'business', count: 180, description: 'Finance, markets, and economic news' },
+  { id: 4, name: 'Lifestyle', slug: 'lifestyle', count: 150, description: 'Health, travel, food, and culture' },
+  { id: 5, name: 'Entertainment', slug: 'entertainment', count: 120, description: 'Music, movies, and celebrity news' },
+  { id: 6, name: 'Capital Campus', slug: 'capital-campus', count: 90, description: 'Student, university, and youth feature stories' },
+  { id: 7, name: 'Opinion', slug: 'opinion', count: 65, description: 'Commentary, columns, and editorial pieces' },
+];
 
 /**
  * Transforms raw WordPress Post DTO into sanitized ArticleDTO.
@@ -35,16 +53,12 @@ function transformWpPost(post: any): ArticleDTO {
   const excerpt = stripHtml(rawExcerpt);
   const content = stripHtml(rawContent);
 
-  // Extract featured image from _embedded if available
   let coverImageUrl: string | undefined;
   if (post._embedded && post._embedded['wp:featuredmedia']?.[0]?.source_url) {
     coverImageUrl = post._embedded['wp:featuredmedia'][0].source_url;
   }
 
-  // Extract author name if available
   const authorName = post._embedded?.author?.[0]?.name || 'Capital Digital';
-
-  // Parse GMT date into timestamp
   const dateGmt = post.date_gmt ? `${post.date_gmt}Z` : post.date || new Date().toISOString();
   const publishedAtTimestamp = new Date(dateGmt).getTime() || Date.now();
 
@@ -99,6 +113,52 @@ async function syncArticlesToPostgres(articles: ArticleDTO[]): Promise<void> {
 }
 
 /**
+ * Fetches available news categories with 1-hour Redis caching.
+ */
+export async function getNewsCategories(): Promise<CategoryDTO[]> {
+  const cacheKey = 'news:categories';
+
+  if (redis.status === 'ready') {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (_) {
+      // Ignore cache error
+    }
+  }
+
+  try {
+    const wpUrl = `${config.services.wpCmsBaseUrl}/categories?per_page=100&hide_empty=true`;
+    const response = await fetch(wpUrl);
+    if (response.ok) {
+      const rawCategories = (await response.json()) as any[];
+      if (Array.isArray(rawCategories) && rawCategories.length > 0) {
+        const categories: CategoryDTO[] = rawCategories.map((cat) => ({
+          id: cat.id,
+          name: stripHtml(cat.name || ''),
+          slug: cat.slug || '',
+          count: cat.count || 0,
+          description: cat.description ? stripHtml(cat.description) : undefined,
+        })).filter(c => c.slug && c.name);
+
+        if (categories.length > 0) {
+          if (redis.status === 'ready') {
+            redis.setex(cacheKey, 3600, JSON.stringify(categories)).catch(() => {});
+          }
+          return categories;
+        }
+      }
+    }
+  } catch (error) {
+    logger.warn({ error }, 'Failed to fetch categories from WordPress REST API. Serving default categories.');
+  }
+
+  return DEFAULT_CATEGORIES;
+}
+
+/**
  * Fetches news articles with support for Category filtering, Pagination, Redis Caching, and Full-Text Search.
  */
 export async function getArticles(params: FetchArticlesQuery): Promise<{ articles: ArticleDTO[]; total: number; page: number; limit: number }> {
@@ -107,7 +167,6 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
   const category = params.category || 'all';
   const search = params.search?.trim();
 
-  // 1. Full-Text Search via PostgreSQL if search term is provided
   if (search && search.length > 0) {
     try {
       const skip = (page - 1) * limit;
@@ -154,7 +213,6 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
     }
   }
 
-  // 2. Redis Caching Check for non-search listings
   const cacheKey = `articles:${category}:page:${page}:limit:${limit}`;
   if (!search && redis.status === 'ready') {
     try {
@@ -167,7 +225,6 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
     }
   }
 
-  // 3. Upstream WordPress REST API Call
   let wpUrl = `${config.services.wpCmsBaseUrl}/posts?_embed=true&page=${page}&per_page=${limit}`;
   if (search) {
     wpUrl += `&search=${encodeURIComponent(search)}`;
@@ -191,12 +248,10 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
       return dto;
     });
 
-    // Async sync to Postgres for future FTS queries
     syncArticlesToPostgres(articles);
 
     const result = { articles, total: total || articles.length, page, limit };
 
-    // Cache in Redis for 5 minutes (300 seconds)
     if (!search && redis.status === 'ready') {
       redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {});
     }
@@ -205,7 +260,6 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
   } catch (error) {
     logger.error({ error, wpUrl }, 'Failed to fetch articles from WordPress API');
 
-    // Fallback: Query local PostgreSQL if WP API is down
     try {
       const skip = (page - 1) * limit;
       const dbArticles = await prisma.article.findMany({

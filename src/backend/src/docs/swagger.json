@@ -41,6 +41,17 @@
         }
       }
     },
+    "/api/v1/news/categories": {
+      "get": {
+        "summary": "News Categories List",
+        "description": "Returns available content categories (News, Sports, Business, Lifestyle, Entertainment) with article counts and descriptions.",
+        "responses": {
+          "200": {
+            "description": "Array of news categories DTOs."
+          }
+        }
+      }
+    },
     "/api/v1/news": {
       "get": {
         "summary": "WordPress News Articles Gateway",
