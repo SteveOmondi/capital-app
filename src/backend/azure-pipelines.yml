@@ -85,6 +85,9 @@ stages:
               LIVE_STREAM_PRIMARY_URL: $(LIVE_STREAM_PRIMARY_URL)
               LIVE_STREAM_FALLBACK_URL: $(LIVE_STREAM_FALLBACK_URL)
               ICY_STREAM_URL: $(ICY_STREAM_URL)
+              FIREBASE_PROJECT_ID: $(FIREBASE_PROJECT_ID)
+              FIREBASE_CLIENT_EMAIL: $(FIREBASE_CLIENT_EMAIL)
+              FIREBASE_PRIVATE_KEY: $(FIREBASE_PRIVATE_KEY)
             displayName: 'Execute Jest Test Suite'
 
   # =========================================================================
@@ -179,5 +182,8 @@ stages:
                       PODCAST_RSS_URL="$(PODCAST_RSS_URL)" \
                       LIVE_STREAM_PRIMARY_URL="$(LIVE_STREAM_PRIMARY_URL)" \
                       LIVE_STREAM_FALLBACK_URL="$(LIVE_STREAM_FALLBACK_URL)" \
-                      ICY_STREAM_URL="$(ICY_STREAM_URL)"
+                      ICY_STREAM_URL="$(ICY_STREAM_URL)" \
+                      FIREBASE_PROJECT_ID="$(FIREBASE_PROJECT_ID)" \
+                      FIREBASE_CLIENT_EMAIL="$(FIREBASE_CLIENT_EMAIL)" \
+                      FIREBASE_PRIVATE_KEY="$(FIREBASE_PRIVATE_KEY)"
                 fi
