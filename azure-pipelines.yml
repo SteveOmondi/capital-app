@@ -43,22 +43,22 @@ stages:
             displayName: 'Install Node.js 18.x'
 
           - script: |
-              cd capital-app/src/backend
+              cd src/backend
               npm ci
             displayName: 'Install Dependencies'
 
           - script: |
-              cd capital-app/src/backend
+              cd src/backend
               npx prisma generate
             displayName: 'Generate Prisma Client'
 
           - script: |
-              cd capital-app/src/backend
+              cd src/backend
               npx tsc --noEmit
             displayName: 'Check TypeScript Compilation'
 
           - script: |
-              cd capital-app/src/backend
+              cd src/backend
               npm test
             displayName: 'Execute Jest Test Suite'
 
@@ -84,8 +84,8 @@ stages:
             inputs:
               command: 'buildAndPush'
               repository: '$(dockerHubUsername)/$(imageRepository)'
-              dockerfile: '$(Build.SourcesDirectory)/capital-app/src/backend/Dockerfile'
-              buildContext: '$(Build.SourcesDirectory)/capital-app/src/backend'
+              dockerfile: '$(Build.SourcesDirectory)/src/backend/Dockerfile'
+              buildContext: '$(Build.SourcesDirectory)/src/backend'
               tags: |
                 $(Build.BuildId)
                 latest
