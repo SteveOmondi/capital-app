@@ -1,6 +1,7 @@
 # Azure DevOps CI/CD Pipeline for Capital FM Backend Gateway
 # Target Compute: Azure Container Apps (ACA) - Scale-to-Zero ($0.00 - $5.00/month)
 # Container Registry: Docker Hub
+# Region: South Africa North (southafricanorth)
 
 trigger:
   branches:
@@ -30,11 +31,13 @@ variables:
   - name: imageRepository
     value: 'capital-app'
 
-  # Azure Resource Names
+  # Azure Resource & Region Config
   - name: resourceGroup
     value: 'rg-capital-prod'
   - name: containerAppName
     value: 'ca-capital-backend-api'
+  - name: azureLocation
+    value: 'southafricanorth'
 
 stages:
   # =========================================================================
@@ -133,8 +136,8 @@ stages:
                 echo "Installing containerapp extension..."
                 az extension add --name containerapp --upgrade
 
-                echo "Ensuring Resource Group $(resourceGroup) exists..."
-                az group create --name $(resourceGroup) --location "eastus"
+                echo "Ensuring Resource Group $(resourceGroup) exists in $(azureLocation)..."
+                az group create --name $(resourceGroup) --location "$(azureLocation)"
 
                 echo "Checking if Azure Container App $(containerAppName) exists in $(resourceGroup)..."
                 if az containerapp show --name $(containerAppName) --resource-group $(resourceGroup) &>/dev/null; then
@@ -144,14 +147,14 @@ stages:
                     --resource-group $(resourceGroup) \
                     --image $(dockerHubUsername)/$(imageRepository):$(Build.BuildId)
                 else
-                  echo "Container app $(containerAppName) does not exist. Creating new Container App..."
+                  echo "Container app $(containerAppName) does not exist. Creating new Container App in $(azureLocation)..."
                   ENV_NAME="env-$(resourceGroup)"
                   if ! az containerapp env show --name $ENV_NAME --resource-group $(resourceGroup) &>/dev/null; then
-                    echo "Creating Container Apps Managed Environment $ENV_NAME..."
+                    echo "Creating Container Apps Managed Environment $ENV_NAME in $(azureLocation)..."
                     az containerapp env create \
                       --name $ENV_NAME \
                       --resource-group $(resourceGroup) \
-                      --location "eastus"
+                      --location "$(azureLocation)"
                   fi
 
                   az containerapp create \
