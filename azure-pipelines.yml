@@ -47,6 +47,8 @@ stages:
           - script: |
               cd src/backend
               npx prisma generate
+            env:
+              DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/capitalfm_db?schema=public'
             displayName: 'Generate Prisma Client'
 
           - script: |
@@ -57,6 +59,11 @@ stages:
           - script: |
               cd src/backend
               npm test
+            env:
+              DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/capitalfm_db?schema=public'
+              REDIS_HOST: '127.0.0.1'
+              REDIS_PORT: '6379'
+              WP_WEBHOOK_SECRET: 'capital_fm_secret_webhook_key_2026'
             displayName: 'Execute Jest Test Suite'
 
   # =========================================================================
