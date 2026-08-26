@@ -75,6 +75,7 @@ stages:
               DATABASE_URL: $(DATABASE_URL)
               REDIS_HOST: $(REDIS_HOST)
               REDIS_PORT: $(REDIS_PORT)
+              REDIS_PASSWORD: $(REDIS_PASSWORD)
               WP_WEBHOOK_SECRET: $(WP_WEBHOOK_SECRET)
             displayName: 'Execute Jest Test Suite'
 
