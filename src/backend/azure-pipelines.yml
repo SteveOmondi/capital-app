@@ -88,6 +88,11 @@ stages:
               FIREBASE_PROJECT_ID: $(FIREBASE_PROJECT_ID)
               FIREBASE_CLIENT_EMAIL: $(FIREBASE_CLIENT_EMAIL)
               FIREBASE_PRIVATE_KEY: $(FIREBASE_PRIVATE_KEY)
+              STREAMGUYS_HOST: $(STREAMGUYS_HOST)
+              STREAMGUYS_CLIENT_ID: $(STREAMGUYS_CLIENT_ID)
+              STREAMGUYS_CLIENT_SECRET: $(STREAMGUYS_CLIENT_SECRET)
+              STREAMGUYS_USERNAME: $(STREAMGUYS_USERNAME)
+              STREAMGUYS_PASSWORD: $(STREAMGUYS_PASSWORD)
             displayName: 'Execute Jest Test Suite'
 
   # =========================================================================
@@ -185,5 +190,10 @@ stages:
                       ICY_STREAM_URL="$(ICY_STREAM_URL)" \
                       FIREBASE_PROJECT_ID="$(FIREBASE_PROJECT_ID)" \
                       FIREBASE_CLIENT_EMAIL="$(FIREBASE_CLIENT_EMAIL)" \
-                      FIREBASE_PRIVATE_KEY="$(FIREBASE_PRIVATE_KEY)"
+                      FIREBASE_PRIVATE_KEY="$(FIREBASE_PRIVATE_KEY)" \
+                      STREAMGUYS_HOST="$(STREAMGUYS_HOST)" \
+                      STREAMGUYS_CLIENT_ID="$(STREAMGUYS_CLIENT_ID)" \
+                      STREAMGUYS_CLIENT_SECRET="$(STREAMGUYS_CLIENT_SECRET)" \
+                      STREAMGUYS_USERNAME="$(STREAMGUYS_USERNAME)" \
+                      STREAMGUYS_PASSWORD="$(STREAMGUYS_PASSWORD)"
                 fi
