@@ -1,6 +1,7 @@
 import { config } from '../config';
 import { parseIcyMetadataString, extractIcyStreamTitle } from '../utils/icyScraper';
 import { fetchAlbumArtwork, EnrichedTrackDetails } from './enrichmentService';
+import { getStreamGuysAccessToken } from './streamGuysService';
 import { redis } from '../config/redis';
 import { logger } from '../middlewares/logger';
 
@@ -8,6 +9,7 @@ export interface StreamConfigDTO {
   primaryHlsUrl: string;
   fallbackAacUrl: string;
   icyStreamUrl: string;
+  provider: 'StreamGuys Recast' | 'Default';
   bitrateKbps: {
     primary: number;
     fallback: number;
@@ -18,6 +20,7 @@ export interface StreamConfigDTO {
   };
   status: 'online' | 'degraded' | 'offline';
   metadataPollingIntervalSeconds: number;
+  streamGuysAccessToken?: string;
 }
 
 export interface NowPlayingDTO {
@@ -28,12 +31,16 @@ export interface NowPlayingDTO {
 
 /**
  * Returns stream resolution configuration for Flutter mobile audio players.
+ * Authenticates with StreamGuys Recast API if credentials are provided.
  */
 export async function getStreamConfig(): Promise<StreamConfigDTO> {
+  const sgToken = await getStreamGuysAccessToken();
+
   return {
     primaryHlsUrl: config.services.liveStreamPrimaryUrl,
     fallbackAacUrl: config.services.liveStreamFallbackUrl,
     icyStreamUrl: config.services.icyStreamUrl,
+    provider: sgToken ? 'StreamGuys Recast' : 'Default',
     bitrateKbps: {
       primary: 128,
       fallback: 64,
@@ -44,6 +51,7 @@ export async function getStreamConfig(): Promise<StreamConfigDTO> {
     },
     status: 'online',
     metadataPollingIntervalSeconds: 5,
+    streamGuysAccessToken: sgToken || undefined,
   };
 }
 

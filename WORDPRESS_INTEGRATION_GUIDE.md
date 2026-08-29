@@ -1,3 +1,6 @@
+```
+```
+
 # 🔌 WordPress Developer Integration Guide
 
 This guide provides technical specifications, JSON payload contracts, and ready-to-use PHP snippets for integrating **WordPress CMS** with the **Capital FM Mobile Backend Gateway** for instant push notifications and article cache sync.
@@ -6,7 +9,7 @@ This guide provides technical specifications, JSON payload contracts, and ready-
 
 ## 🌐 API Gateway Base URLs
 
-- **Production URL**: `https://ca-capital-backend-api.southafricanorth.azurecontainerapps.io`
+- **Production URL**: `https://ca-capital-backend-api.salmonwave-7494888b.eastus.azurecontainerapps.io/`
 - **Development URL**: `http://localhost:3000`
 
 ---
@@ -30,6 +33,7 @@ Notify the mobile backend gateway whenever a news post is published or updated i
 - **Trigger Hook in WP**: `transition_post_status` or `publish_post`
 
 ### JSON Request Payload
+
 ```json
 {
   "postId": 10452,
@@ -42,6 +46,7 @@ Notify the mobile backend gateway whenever a news post is published or updated i
 ```
 
 ### Response Payload (`200 OK`)
+
 ```json
 {
   "status": "success",
@@ -63,6 +68,7 @@ Notify the mobile backend gateway whenever a new podcast episode is published.
 - **Trigger Hook in WP**: `publish_podcast` or custom podcast post type hook
 
 ### JSON Request Payload
+
 ```json
 {
   "podcastId": "financial-fitness",
@@ -75,6 +81,7 @@ Notify the mobile backend gateway whenever a new podcast episode is published.
 ```
 
 ### Response Payload (`200 OK`)
+
 ```json
 {
   "status": "success",
@@ -101,7 +108,7 @@ Add this code to your WordPress theme's `functions.php` or a custom plugin (e.g.
 
 if (!defined('ABSPATH')) exit;
 
-define('CAPITAL_BACKEND_URL', 'https://ca-capital-backend-api.southafricanorth.azurecontainerapps.io');
+define('CAPITAL_BACKEND_URL', 'https://ca-capital-backend-api.salmonwave-7494888b.eastus.azurecontainerapps.io/');
 define('CAPITAL_WEBHOOK_SECRET', 'capital_fm_secret_webhook_key_2026');
 
 /**

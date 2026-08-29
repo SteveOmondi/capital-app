@@ -6,9 +6,9 @@ This document provides complete API contracts, endpoint specifications, JSON DTO
 
 ## 🌐 API Gateway Base URLs
 
-- **Production Gateway URL**: `https://ca-capital-backend-api.southafricanorth.azurecontainerapps.io`
+- **Production Gateway URL**: `ca-capital-backend-api.salmonwave-7494888b.eastus.azurecontainerapps.io`
 - **Local Dev Gateway URL**: `http://localhost:3000` *(Use `http://10.0.2.2:3000` for Android Emulator)*
-- **Interactive Swagger Documentation**: `https://ca-capital-backend-api.southafricanorth.azurecontainerapps.io/docs`
+- **Interactive Swagger Documentation**: `ca-capital-backend-api.salmonwave-7494888b.eastus.azurecontainerapps.io/docs`
 
 ---
 
@@ -223,7 +223,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class CapitalApiClient {
-  static const String baseUrl = 'https://ca-capital-backend-api.southafricanorth.azurecontainerapps.io';
+  static const String baseUrl = 'ca-capital-backend-api.salmonwave-7494888b.eastus.azurecontainerapps.io';
 
   /// Fetch News Categories
   Future<List<dynamic>> fetchCategories() async {
