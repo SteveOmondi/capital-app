@@ -3,6 +3,13 @@ import path from 'path';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
+function sanitizeStreamUrl(url: string | undefined, fallback: string): string {
+  if (!url || url.includes('stream.capitalfm.africa')) {
+    return fallback;
+  }
+  return url;
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   env: process.env.NODE_ENV || 'development',
@@ -37,17 +44,17 @@ export const config = {
     clientSecret: process.env.STREAMGUYS_CLIENT_SECRET,
     username: process.env.STREAMGUYS_USERNAME,
     password: process.env.STREAMGUYS_PASSWORD,
-    primaryHlsUrl: process.env.STREAMGUYS_PRIMARY_HLS_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
-    fallbackAacUrl: process.env.STREAMGUYS_FALLBACK_AAC_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
-    icyStreamUrl: process.env.STREAMGUYS_ICY_STREAM_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
+    primaryHlsUrl: sanitizeStreamUrl(process.env.STREAMGUYS_PRIMARY_HLS_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
+    fallbackAacUrl: sanitizeStreamUrl(process.env.STREAMGUYS_FALLBACK_AAC_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
+    icyStreamUrl: sanitizeStreamUrl(process.env.STREAMGUYS_ICY_STREAM_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
     podcastRssUrl: process.env.STREAMGUYS_PODCAST_RSS_URL,
   },
 
   services: {
     wpCmsBaseUrl: process.env.WP_CMS_BASE_URL || 'https://www.capitalfm.africa/wp-json/wp/v2',
     podcastRssUrl: process.env.PODCAST_RSS_URL || 'https://www.capitalfm.africa/feed/podcast/',
-    liveStreamPrimaryUrl: process.env.LIVE_STREAM_PRIMARY_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
-    liveStreamFallbackUrl: process.env.LIVE_STREAM_FALLBACK_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
-    icyStreamUrl: process.env.ICY_STREAM_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
+    liveStreamPrimaryUrl: sanitizeStreamUrl(process.env.LIVE_STREAM_PRIMARY_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
+    liveStreamFallbackUrl: sanitizeStreamUrl(process.env.LIVE_STREAM_FALLBACK_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
+    icyStreamUrl: sanitizeStreamUrl(process.env.ICY_STREAM_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
   },
 };
