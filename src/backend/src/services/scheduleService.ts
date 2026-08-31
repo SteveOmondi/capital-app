@@ -120,7 +120,13 @@ export async function getWeeklySchedules(day?: string): Promise<{ day: string; s
   };
 }
 
-function getTodayName(): string {
+export async function getCurrentLiveShow(): Promise<ShowSlot | null> {
+  const { schedule } = await getWeeklySchedules();
+  const liveShow = schedule.find((slot) => slot.isLiveNow);
+  return liveShow || null;
+}
+
+export function getTodayName(): string {
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   return days[new Date().getDay()];
 }

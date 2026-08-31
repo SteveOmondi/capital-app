@@ -2,6 +2,7 @@ import { config } from '../config';
 import { parseIcyMetadataString, extractIcyStreamTitle } from '../utils/icyScraper';
 import { fetchAlbumArtwork, EnrichedTrackDetails } from './enrichmentService';
 import { getStreamGuysAccessToken } from './streamGuysService';
+import { getCurrentLiveShow, getTodayName, ShowSlot } from './scheduleService';
 import { redis } from '../config/redis';
 import { logger } from '../middlewares/logger';
 
@@ -26,6 +27,10 @@ export interface StreamConfigDTO {
 export interface NowPlayingDTO {
   isLive: boolean;
   track: EnrichedTrackDetails;
+  show?: ShowSlot | null;
+  streamUrl: string;
+  fallbackStreamUrl?: string;
+  provider?: string;
   timestamp: string;
 }
 
@@ -110,10 +115,27 @@ export async function getNowPlayingTrack(): Promise<NowPlayingDTO> {
 
   const parsed = parseIcyMetadataString(rawMetadataString);
   const enriched = await fetchAlbumArtwork(parsed.artist, parsed.title);
+  const [streamConfig, currentShow] = await Promise.all([
+    getStreamConfig(),
+    getCurrentLiveShow(),
+  ]);
 
   const payload: NowPlayingDTO = {
     isLive: true,
     track: enriched,
+    show: currentShow || {
+      id: 'capital-fm-live',
+      title: 'Capital FM Live Radio',
+      presenters: ['Capital FM Crew'],
+      startTime: '00:00',
+      endTime: '23:59',
+      dayOfWeek: getTodayName(),
+      description: 'Capital FM Kenya - 98.4 FM Live Radio Broadcasting',
+      isLiveNow: true,
+    },
+    streamUrl: streamConfig.primaryHlsUrl,
+    fallbackStreamUrl: streamConfig.fallbackAacUrl,
+    provider: streamConfig.provider,
     timestamp: new Date().toISOString(),
   };
 
