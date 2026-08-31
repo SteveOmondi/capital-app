@@ -40,6 +40,7 @@ export const config = {
     primaryHlsUrl: process.env.STREAMGUYS_PRIMARY_HLS_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
     fallbackAacUrl: process.env.STREAMGUYS_FALLBACK_AAC_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
     icyStreamUrl: process.env.STREAMGUYS_ICY_STREAM_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
+    podcastRssUrl: process.env.STREAMGUYS_PODCAST_RSS_URL,
   },
 
   services: {
