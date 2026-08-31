@@ -99,14 +99,28 @@ const WEEKLY_SCHEDULE: Record<string, ShowSlot[]> = {
   ],
 };
 
+/**
+ * Helper to get current Date object offset to East Africa Time (EAT: UTC+3).
+ */
+export function getEatDate(date: Date = new Date()): Date {
+  const utcMs = date.getTime() + date.getTimezoneOffset() * 60 * 1000;
+  return new Date(utcMs + 3 * 60 * 60 * 1000);
+}
+
+export function getTodayName(): string {
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const eatDate = getEatDate();
+  return days[eatDate.getDay()];
+}
+
 export async function getWeeklySchedules(day?: string): Promise<{ day: string; schedule: ShowSlot[] }> {
   const targetDay = (day || getTodayName()).toLowerCase();
   const schedule = WEEKLY_SCHEDULE[targetDay] || WEEKLY_SCHEDULE['monday'];
 
-  // Calculate live show status
-  const now = new Date();
-  const currentHours = now.getHours().toString().padStart(2, '0');
-  const currentMinutes = now.getMinutes().toString().padStart(2, '0');
+  // Calculate live show status using East Africa Time (EAT = UTC+3)
+  const eatNow = getEatDate();
+  const currentHours = eatNow.getHours().toString().padStart(2, '0');
+  const currentMinutes = eatNow.getMinutes().toString().padStart(2, '0');
   const currentTimeStr = `${currentHours}:${currentMinutes}`;
 
   const enrichedSchedule = schedule.map((slot) => ({
@@ -124,9 +138,4 @@ export async function getCurrentLiveShow(): Promise<ShowSlot | null> {
   const { schedule } = await getWeeklySchedules();
   const liveShow = schedule.find((slot) => slot.isLiveNow);
   return liveShow || null;
-}
-
-export function getTodayName(): string {
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  return days[new Date().getDay()];
 }
