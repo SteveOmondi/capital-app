@@ -62,13 +62,28 @@ function transformWpPost(post: any): ArticleDTO {
   const dateGmt = post.date_gmt ? `${post.date_gmt}Z` : post.date || new Date().toISOString();
   const publishedAtTimestamp = new Date(dateGmt).getTime() || Date.now();
 
+  // Dynamically extract primary category slug from embedded terms
+  let categorySlug = 'news';
+  const embeddedTerms = post._embedded?.['wp:term']?.[0];
+  if (Array.isArray(embeddedTerms) && embeddedTerms.length > 0) {
+    const matchedTerm = embeddedTerms.find((t: any) =>
+      ['sports', 'business', 'lifestyle', 'entertainment', 'africa', 'capital-campus', 'opinion', 'technology', 'capital-health', 'county-news'].includes(t.slug)
+    ) || embeddedTerms[0];
+
+    if (matchedTerm && matchedTerm.slug) {
+      categorySlug = matchedTerm.slug;
+    }
+  } else if (post.category_slug) {
+    categorySlug = post.category_slug;
+  }
+
   return {
     id: post.id,
     slug: post.slug || `article-${post.id}`,
     title,
     excerpt: excerpt || title,
     content,
-    categorySlug: post.category_slug || 'news',
+    categorySlug,
     author: authorName,
     coverImageUrl,
     publishedAt: new Date(publishedAtTimestamp).toISOString(),
@@ -197,6 +212,15 @@ export async function getNewsCategories(): Promise<CategoryDTO[]> {
 }
 
 /**
+ * Helper to get WordPress Category ID by category slug.
+ */
+async function getCategoryIdBySlug(slug: string): Promise<number | undefined> {
+  const categories = await getNewsCategories();
+  const found = categories.find((c) => c.slug.toLowerCase() === slug.toLowerCase());
+  return found?.id;
+}
+
+/**
  * Fetches news articles with support for Category filtering, Pagination, Redis Caching, and Full-Text Search.
  */
 export async function getArticles(params: FetchArticlesQuery): Promise<{ articles: ArticleDTO[]; total: number; page: number; limit: number }> {
@@ -264,6 +288,14 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
   }
 
   let wpUrl = `${config.services.wpCmsBaseUrl}/posts?_embed=true&page=${page}&per_page=${limit}`;
+
+  if (category !== 'all') {
+    const catId = await getCategoryIdBySlug(category);
+    if (catId) {
+      wpUrl += `&categories=${catId}`;
+    }
+  }
+
   if (search) {
     wpUrl += `&search=${encodeURIComponent(search)}`;
   }
@@ -278,13 +310,7 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
     const total = totalHeader ? parseInt(totalHeader, 10) : 0;
 
     const rawPosts = (await response.json()) as any[];
-    const articles = rawPosts.map((post) => {
-      const dto = transformWpPost(post);
-      if (category !== 'all') {
-        dto.categorySlug = category;
-      }
-      return dto;
-    });
+    const articles = rawPosts.map((post) => transformWpPost(post));
 
     syncArticlesToPostgres(articles);
 

@@ -107,6 +107,18 @@ export function getEatDate(date: Date = new Date()): Date {
   return new Date(utcMs + 3 * 60 * 60 * 1000);
 }
 
+export function formatEatIsoString(date: Date = new Date()): string {
+  const eat = getEatDate(date);
+  const year = eat.getFullYear();
+  const month = String(eat.getMonth() + 1).padStart(2, '0');
+  const day = String(eat.getDate()).padStart(2, '0');
+  const hours = String(eat.getHours()).padStart(2, '0');
+  const minutes = String(eat.getMinutes()).padStart(2, '0');
+  const seconds = String(eat.getSeconds()).padStart(2, '0');
+  const millis = String(eat.getMilliseconds()).padStart(3, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${millis}+03:00`;
+}
+
 export function getTodayName(): string {
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const eatDate = getEatDate();

@@ -2,7 +2,7 @@ import { config } from '../config';
 import { parseIcyMetadataString, extractIcyStreamTitle } from '../utils/icyScraper';
 import { fetchAlbumArtwork, EnrichedTrackDetails } from './enrichmentService';
 import { getStreamGuysAccessToken } from './streamGuysService';
-import { getCurrentLiveShow, getTodayName, ShowSlot } from './scheduleService';
+import { getCurrentLiveShow, getTodayName, formatEatIsoString, ShowSlot } from './scheduleService';
 import { redis } from '../config/redis';
 import { logger } from '../middlewares/logger';
 
@@ -136,7 +136,7 @@ export async function getNowPlayingTrack(): Promise<NowPlayingDTO> {
     streamUrl: streamConfig.primaryHlsUrl,
     fallbackStreamUrl: streamConfig.fallbackAacUrl,
     provider: streamConfig.provider,
-    timestamp: new Date().toISOString(),
+    timestamp: formatEatIsoString(),
   };
 
   // Cache state in Redis for 5 seconds
