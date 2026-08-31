@@ -35,12 +35,19 @@ export interface NowPlayingDTO {
  */
 export async function getStreamConfig(): Promise<StreamConfigDTO> {
   const sgToken = await getStreamGuysAccessToken();
+  const isStreamGuysActive = Boolean(sgToken);
 
   return {
-    primaryHlsUrl: config.services.liveStreamPrimaryUrl,
-    fallbackAacUrl: config.services.liveStreamFallbackUrl,
-    icyStreamUrl: config.services.icyStreamUrl,
-    provider: sgToken ? 'StreamGuys Recast' : 'Default',
+    primaryHlsUrl: isStreamGuysActive
+      ? config.streamguys.primaryHlsUrl
+      : config.services.liveStreamPrimaryUrl,
+    fallbackAacUrl: isStreamGuysActive
+      ? config.streamguys.fallbackAacUrl
+      : config.services.liveStreamFallbackUrl,
+    icyStreamUrl: isStreamGuysActive
+      ? config.streamguys.icyStreamUrl
+      : config.services.icyStreamUrl,
+    provider: isStreamGuysActive ? 'StreamGuys Recast' : 'Default',
     bitrateKbps: {
       primary: 128,
       fallback: 64,
@@ -80,7 +87,8 @@ export async function getNowPlayingTrack(): Promise<NowPlayingDTO> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-    const response = await fetch(config.services.icyStreamUrl, {
+    const targetIcyUrl = config.streamguys.icyStreamUrl || config.services.icyStreamUrl;
+    const response = await fetch(targetIcyUrl, {
       headers: { 'Icy-MetaData': '1' },
       signal: controller.signal,
     });

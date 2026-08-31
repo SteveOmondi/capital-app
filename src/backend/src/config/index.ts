@@ -31,11 +31,22 @@ export const config = {
     wpWebhookSecret: process.env.WP_WEBHOOK_SECRET || 'capital_fm_secret_webhook_key_2026',
   },
 
+  streamguys: {
+    host: process.env.STREAMGUYS_HOST || 'https://atunwadigital-recast.streamguys1.com',
+    clientId: process.env.STREAMGUYS_CLIENT_ID,
+    clientSecret: process.env.STREAMGUYS_CLIENT_SECRET,
+    username: process.env.STREAMGUYS_USERNAME,
+    password: process.env.STREAMGUYS_PASSWORD,
+    primaryHlsUrl: process.env.STREAMGUYS_PRIMARY_HLS_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
+    fallbackAacUrl: process.env.STREAMGUYS_FALLBACK_AAC_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
+    icyStreamUrl: process.env.STREAMGUYS_ICY_STREAM_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
+  },
+
   services: {
     wpCmsBaseUrl: process.env.WP_CMS_BASE_URL || 'https://www.capitalfm.africa/wp-json/wp/v2',
     podcastRssUrl: process.env.PODCAST_RSS_URL || 'https://www.capitalfm.africa/feed/podcast/',
-    liveStreamPrimaryUrl: process.env.LIVE_STREAM_PRIMARY_URL || 'https://stream.capitalfm.africa/live/128k.m3u8',
-    liveStreamFallbackUrl: process.env.LIVE_STREAM_FALLBACK_URL || 'https://stream.capitalfm.africa/live/64k.aac',
-    icyStreamUrl: process.env.ICY_STREAM_URL || 'http://stream.capitalfm.africa:8000/capitalfm.mp3',
+    liveStreamPrimaryUrl: process.env.LIVE_STREAM_PRIMARY_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
+    liveStreamFallbackUrl: process.env.LIVE_STREAM_FALLBACK_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
+    icyStreamUrl: process.env.ICY_STREAM_URL || 'https://atunwadigital.streamguys1.com/capitalfm',
   },
 };

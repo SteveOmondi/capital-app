@@ -1,5 +1,6 @@
 import { redis } from '../config/redis';
 import { logger } from '../middlewares/logger';
+import { config } from '../config';
 
 export interface StreamGuysTokenResponse {
   token_type: string;
@@ -20,9 +21,9 @@ export interface StreamGuysConfig {
  * Caches the token in Redis to minimize authentication roundtrips.
  */
 export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig): Promise<string | null> {
-  const host = customConfig?.host || process.env.STREAMGUYS_HOST || 'https://atunwadigital-recast.streamguys1.com';
-  const clientId = customConfig?.clientId || process.env.STREAMGUYS_CLIENT_ID;
-  const clientSecret = customConfig?.clientSecret || process.env.STREAMGUYS_CLIENT_SECRET;
+  const host = customConfig?.host || config.streamguys.host;
+  const clientId = customConfig?.clientId || config.streamguys.clientId;
+  const clientSecret = customConfig?.clientSecret || config.streamguys.clientSecret;
 
   if (!clientId || !clientSecret) {
     logger.debug('StreamGuys Client ID or Secret missing. Skipping StreamGuys OAuth authentication.');
