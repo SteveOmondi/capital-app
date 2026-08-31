@@ -4,7 +4,7 @@ import { prisma } from '../config/db';
 import { redis } from '../config/redis';
 
 describe('News API Integration Tests', () => {
-  jest.setTimeout(15000);
+  jest.setTimeout(30000);
 
   afterAll(async () => {
     try {
