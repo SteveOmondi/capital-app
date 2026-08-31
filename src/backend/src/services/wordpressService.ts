@@ -113,7 +113,25 @@ async function syncArticlesToPostgres(articles: ArticleDTO[]): Promise<void> {
 }
 
 /**
+ * List of primary editorial category slugs prioritized for mobile app navigation.
+ */
+const PRIORITY_CATEGORY_SLUGS = [
+  'news',
+  'sports',
+  'business',
+  'lifestyle',
+  'entertainment',
+  'lowdown-capital-campus',
+  'capital-campus',
+  'opinion',
+  'africa',
+  'capital-health',
+  'technology',
+];
+
+/**
  * Fetches available news categories with 1-hour Redis caching.
+ * Filters out raw WordPress archive tags (such as election years, historical tags).
  */
 export async function getNewsCategories(): Promise<CategoryDTO[]> {
   const cacheKey = 'news:categories';
@@ -135,19 +153,39 @@ export async function getNewsCategories(): Promise<CategoryDTO[]> {
     if (response.ok) {
       const rawCategories = (await response.json()) as any[];
       if (Array.isArray(rawCategories) && rawCategories.length > 0) {
-        const categories: CategoryDTO[] = rawCategories.map((cat) => ({
-          id: cat.id,
-          name: stripHtml(cat.name || ''),
-          slug: cat.slug || '',
-          count: cat.count || 0,
-          description: cat.description ? stripHtml(cat.description) : undefined,
-        })).filter(c => c.slug && c.name);
+        // Filter out numeric election years, tags starting with numbers or uppercase acronyms
+        const filtered = rawCategories
+          .map((cat) => ({
+            id: cat.id,
+            name: stripHtml(cat.name || ''),
+            slug: cat.slug || '',
+            count: cat.count || 0,
+            description: cat.description ? stripHtml(cat.description) : undefined,
+          }))
+          .filter((c) => {
+            if (!c.slug || !c.name || c.count < 5) return false;
+            // Exclude tags starting with numbers (e.g. 2016-us-election, 2027-kenya-elections, 9-11)
+            if (/^\d/.test(c.slug) || /^\d/.test(c.name)) return false;
+            // Exclude common archived tag patterns
+            if (/election/i.test(c.slug) || /afcon/i.test(c.slug) || /auc-race/i.test(c.slug)) return false;
+            return true;
+          });
 
-        if (categories.length > 0) {
+        // Sort priority categories first
+        filtered.sort((a, b) => {
+          const indexA = PRIORITY_CATEGORY_SLUGS.indexOf(a.slug);
+          const indexB = PRIORITY_CATEGORY_SLUGS.indexOf(b.slug);
+          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+          return b.count - a.count;
+        });
+
+        if (filtered.length > 0) {
           if (redis.status === 'ready') {
-            redis.setex(cacheKey, 3600, JSON.stringify(categories)).catch(() => {});
+            redis.setex(cacheKey, 3600, JSON.stringify(filtered)).catch(() => {});
           }
-          return categories;
+          return filtered;
         }
       }
     }

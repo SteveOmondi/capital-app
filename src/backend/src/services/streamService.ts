@@ -96,7 +96,12 @@ export async function getNowPlayingTrack(): Promise<NowPlayingDTO> {
     clearTimeout(timeoutId);
 
     const icyMetaHeader = response.headers.get('icy-name') || response.headers.get('icy-description');
-    if (icyMetaHeader) {
+    if (
+      icyMetaHeader &&
+      icyMetaHeader !== 'Unspecified description' &&
+      icyMetaHeader !== 'various' &&
+      icyMetaHeader.trim().length > 0
+    ) {
       rawMetadataString = icyMetaHeader;
     }
   } catch (error) {
