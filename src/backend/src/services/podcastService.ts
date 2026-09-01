@@ -14,7 +14,7 @@ const STREAMGUYS_DEFAULT_RSS_FEEDS = [
 ];
 
 export async function getPodcastChannel(): Promise<PodcastChannel> {
-  const cacheKey = 'podcasts:channel:all';
+  const cacheKey = 'podcasts:streamguys:channel:v3';
 
   // Redis cache check
   if (redis.status === 'ready') {
@@ -106,7 +106,7 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
         guid: 'capital-fm-podcast-jam-984',
         title: 'The Jam 98.4 Highlights',
         description: 'Daily highlights and interviews from The Jam 98.4 on Capital FM Kenya.',
-        audioUrl: fallbackStreamUrl,
+        audioUrl: 'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/the-jam-984-highlights.mp3',
         duration: '45:00',
         publishedAt: new Date().toISOString(),
         publishedTimestamp: Date.now(),
