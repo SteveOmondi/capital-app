@@ -54,24 +54,18 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
             const validEpisodes = channel.episodes.filter((ep) => ep.audioUrl && ep.audioUrl.trim().length > 0);
             if (validEpisodes.length > 0) {
               aggregatedEpisodes.push(...validEpisodes);
-            } else {
-              aggregatedEpisodes.push({
-                guid: url,
-                title: channel.title,
-                description: channel.description || `${channel.title} on StreamGuys Recast`,
-                audioUrl: fallbackStreamUrl,
-                duration: '45:00',
-                publishedAt: new Date().toISOString(),
-                publishedTimestamp: Date.now(),
-                imageUrl: channel.imageUrl || defaultImageUrl,
-              });
             }
           } else if (channel.title) {
+            // Extract feed slug e.g. "kdeja-thedj-mix" from StreamGuys RSS URL
+            const slugMatch = url.match(/\/([^\/]+)\.xml$/);
+            const feedSlug = slugMatch ? slugMatch[1] : 'mix';
+            const audioFileUrl = `https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/${feedSlug}.mp3`;
+
             aggregatedEpisodes.push({
               guid: url,
               title: channel.title,
-              description: channel.description || `${channel.title} on StreamGuys Recast`,
-              audioUrl: fallbackStreamUrl,
+              description: channel.description || `${channel.title} Mixmaster Podcast on StreamGuys`,
+              audioUrl: audioFileUrl,
               duration: '45:00',
               publishedAt: new Date().toISOString(),
               publishedTimestamp: Date.now(),

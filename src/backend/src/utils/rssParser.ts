@@ -50,18 +50,16 @@ export function parsePodcastRssXml(xmlData: string): PodcastChannel {
     let audioUrl = enclosure?.['@_url'] || enclosure?.url || '';
 
     if (!audioUrl && fullHtmlContent) {
+      const directAudioMatch = fullHtmlContent.match(/https?:\/\/[^"'\s\>]+\.(mp3|m4a|aac)/i);
       const scMatch =
         fullHtmlContent.match(/https%3A%2F%2Fapi\.soundcloud\.com%2Ftracks%2F\d+/i) ||
-        fullHtmlContent.match(/https:\/\/api\.soundcloud\.com\/tracks\/\d+/i) ||
-        fullHtmlContent.match(/tracks%2F(\d+)/i) ||
-        fullHtmlContent.match(/https?:\/\/[^"'\s\>]+\.(mp3|m4a|aac)/i);
+        fullHtmlContent.match(/https:\/\/api\.soundcloud\.com\/tracks\/\d+/i);
 
-      if (scMatch) {
-        if (scMatch[1] && !scMatch[0].startsWith('http')) {
-          audioUrl = `https://api.soundcloud.com/tracks/${scMatch[1]}`;
-        } else {
-          audioUrl = decodeURIComponent(scMatch[0]);
-        }
+      if (directAudioMatch) {
+        audioUrl = directAudioMatch[0];
+      } else if (scMatch) {
+        const rawSc = decodeURIComponent(scMatch[0]);
+        audioUrl = `https://w.soundcloud.com/player/?url=${encodeURIComponent(rawSc)}`;
       }
     }
 
