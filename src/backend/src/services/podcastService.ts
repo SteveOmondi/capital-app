@@ -3,6 +3,16 @@ import { parsePodcastRssXml, PodcastChannel } from '../utils/rssParser';
 import { redis } from '../config/redis';
 import { logger } from '../middlewares/logger';
 
+const STREAMGUYS_DEFAULT_RSS_FEEDS = [
+  'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/kdeja-thedj-mix.xml',
+  'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-schwaz-mix.xml',
+  'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-pikachu-mix.xml',
+  'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-uv-mix.xml',
+  'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-slick-mix.xml',
+  'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-tony-mix.xml',
+  'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-adrian-mix.xml',
+];
+
 export async function getPodcastChannel(): Promise<PodcastChannel> {
   const cacheKey = 'podcasts:channel:all';
 
@@ -18,14 +28,10 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
     }
   }
 
-  const defaultRssUrl = 'https://capitalfm.africa/podcasts/feed/';
-  const rawTargetUrl = config.streamguys.podcastRssUrl || config.services.podcastRssUrl || defaultRssUrl;
-
-  // Split multiple URLs and combine default RSS feed if missing
-  let urls = rawTargetUrl.split(',').map((u) => u.trim()).filter(Boolean);
-  if (!urls.includes(defaultRssUrl)) {
-    urls.unshift(defaultRssUrl);
-  }
+  const rawTargetUrl = config.streamguys.podcastRssUrl || config.services.podcastRssUrl;
+  const urls = rawTargetUrl
+    ? rawTargetUrl.split(',').map((u) => u.trim()).filter(Boolean)
+    : STREAMGUYS_DEFAULT_RSS_FEEDS;
 
   const aggregatedEpisodes: any[] = [];
   const defaultImageUrl = 'https://www.capitalfm.africa/wp-content/uploads/2026/05/cropped-cfmlogo-1-150x150.jpg';
@@ -46,11 +52,35 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
 
           if (channel.episodes && channel.episodes.length > 0) {
             const validEpisodes = channel.episodes.filter((ep) => ep.audioUrl && ep.audioUrl.trim().length > 0);
-            aggregatedEpisodes.push(...validEpisodes);
+            if (validEpisodes.length > 0) {
+              aggregatedEpisodes.push(...validEpisodes);
+            } else {
+              aggregatedEpisodes.push({
+                guid: url,
+                title: channel.title,
+                description: channel.description || `${channel.title} on StreamGuys Recast`,
+                audioUrl: fallbackStreamUrl,
+                duration: '45:00',
+                publishedAt: new Date().toISOString(),
+                publishedTimestamp: Date.now(),
+                imageUrl: channel.imageUrl || defaultImageUrl,
+              });
+            }
+          } else if (channel.title) {
+            aggregatedEpisodes.push({
+              guid: url,
+              title: channel.title,
+              description: channel.description || `${channel.title} on StreamGuys Recast`,
+              audioUrl: fallbackStreamUrl,
+              duration: '45:00',
+              publishedAt: new Date().toISOString(),
+              publishedTimestamp: Date.now(),
+              imageUrl: channel.imageUrl || defaultImageUrl,
+            });
           }
         }
       } catch (error) {
-        logger.warn({ url, error }, 'Failed to fetch individual podcast RSS feed');
+        logger.warn({ url, error }, 'Failed to fetch individual StreamGuys podcast RSS feed');
       }
     })
   );
@@ -88,18 +118,53 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
         publishedTimestamp: Date.now(),
         imageUrl: defaultImageUrl,
       },
-      {
-        guid: 'capital-fm-podcast-breakfast',
-        title: 'Capital FM Breakfast Show Highlights',
-        description: 'Catch up on news, discussion, and top commentary from the morning team.',
-        audioUrl: fallbackStreamUrl,
-        duration: '60:00',
-        publishedAt: new Date(Date.now() - 86400000).toISOString(),
-        publishedTimestamp: Date.now() - 86400000,
-        imageUrl: defaultImageUrl,
-      },
-    ],
-  };
+/**
+ * Fetches website RSS feed podcasts (SoundCloud / website embedded episodes).
+ */
+export async function getWebsiteRssPodcastChannel(): Promise<PodcastChannel> {
+  const cacheKey = 'podcasts:channel:rss';
 
-  return fallbackChannel;
+  if (redis.status === 'ready') {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (_) {
+      // Ignore cache read error
+    }
+  }
+
+  const websiteRssUrl = 'https://capitalfm.africa/podcasts/feed/';
+  const defaultImageUrl = 'https://www.capitalfm.africa/wp-content/uploads/2026/05/cropped-cfmlogo-1-150x150.jpg';
+
+  try {
+    const response = await fetch(websiteRssUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    if (response.ok) {
+      const xmlData = await response.text();
+      const channel = parsePodcastRssXml(xmlData);
+
+      if (redis.status === 'ready') {
+        redis.setex(cacheKey, 900, JSON.stringify(channel)).catch(() => {});
+      }
+
+      return channel;
+    }
+  } catch (error) {
+    logger.warn({ error, url: websiteRssUrl }, 'Failed to fetch website RSS podcast feed');
+  }
+
+  return {
+    title: 'Capital FM Website Podcasts',
+    description: 'Latest audio shows and interview podcasts from Capital FM Kenya.',
+    link: 'https://capitalfm.africa',
+    imageUrl: defaultImageUrl,
+    episodes: [],
+  };
 }

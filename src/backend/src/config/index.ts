@@ -52,7 +52,7 @@ export const config = {
 
   services: {
     wpCmsBaseUrl: process.env.WP_CMS_BASE_URL || 'https://www.capitalfm.africa/wp-json/wp/v2',
-    podcastRssUrl: process.env.PODCAST_RSS_URL || 'https://capitalfm.africa/podcasts/feed/',
+    podcastRssUrl: process.env.PODCAST_RSS_URL || 'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/kdeja-thedj-mix.xml,https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-schwaz-mix.xml,https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-pikachu-mix.xml,https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-uv-mix.xml,https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-slick-mix.xml,https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-tony-mix.xml,https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-adrian-mix.xml',
     liveStreamPrimaryUrl: sanitizeStreamUrl(process.env.LIVE_STREAM_PRIMARY_URL, 'https://atunwadigital.streamguys1.com/capitalfm/playlist.m3u8'),
     liveStreamFallbackUrl: sanitizeStreamUrl(process.env.LIVE_STREAM_FALLBACK_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
     icyStreamUrl: sanitizeStreamUrl(process.env.ICY_STREAM_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
