@@ -44,7 +44,7 @@ export const config = {
     clientSecret: process.env.STREAMGUYS_CLIENT_SECRET,
     username: process.env.STREAMGUYS_USERNAME,
     password: process.env.STREAMGUYS_PASSWORD,
-    primaryHlsUrl: sanitizeStreamUrl(process.env.STREAMGUYS_PRIMARY_HLS_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
+    primaryHlsUrl: sanitizeStreamUrl(process.env.STREAMGUYS_PRIMARY_HLS_URL, 'https://atunwadigital.streamguys1.com/capitalfm/playlist.m3u8'),
     fallbackAacUrl: sanitizeStreamUrl(process.env.STREAMGUYS_FALLBACK_AAC_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
     icyStreamUrl: sanitizeStreamUrl(process.env.STREAMGUYS_ICY_STREAM_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
     podcastRssUrl: process.env.STREAMGUYS_PODCAST_RSS_URL,
@@ -52,8 +52,8 @@ export const config = {
 
   services: {
     wpCmsBaseUrl: process.env.WP_CMS_BASE_URL || 'https://www.capitalfm.africa/wp-json/wp/v2',
-    podcastRssUrl: process.env.PODCAST_RSS_URL || 'https://www.capitalfm.africa/feed/podcast/',
-    liveStreamPrimaryUrl: sanitizeStreamUrl(process.env.LIVE_STREAM_PRIMARY_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
+    podcastRssUrl: process.env.PODCAST_RSS_URL || 'https://capitalfm.africa/podcasts/feed/',
+    liveStreamPrimaryUrl: sanitizeStreamUrl(process.env.LIVE_STREAM_PRIMARY_URL, 'https://atunwadigital.streamguys1.com/capitalfm/playlist.m3u8'),
     liveStreamFallbackUrl: sanitizeStreamUrl(process.env.LIVE_STREAM_FALLBACK_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
     icyStreamUrl: sanitizeStreamUrl(process.env.ICY_STREAM_URL, 'https://atunwadigital.streamguys1.com/capitalfm'),
   },

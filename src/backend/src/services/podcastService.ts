@@ -18,8 +18,14 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
     }
   }
 
-  const rawTargetUrl = config.streamguys.podcastRssUrl || config.services.podcastRssUrl;
-  const urls = rawTargetUrl.split(',').map((u) => u.trim()).filter(Boolean);
+  const defaultRssUrl = 'https://capitalfm.africa/podcasts/feed/';
+  const rawTargetUrl = config.streamguys.podcastRssUrl || config.services.podcastRssUrl || defaultRssUrl;
+
+  // Split multiple URLs and combine default RSS feed if missing
+  let urls = rawTargetUrl.split(',').map((u) => u.trim()).filter(Boolean);
+  if (!urls.includes(defaultRssUrl)) {
+    urls.unshift(defaultRssUrl);
+  }
 
   const aggregatedEpisodes: any[] = [];
   const defaultImageUrl = 'https://www.capitalfm.africa/wp-content/uploads/2026/05/cropped-cfmlogo-1-150x150.jpg';
@@ -28,25 +34,19 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
   await Promise.all(
     urls.map(async (url) => {
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
+        });
         if (response.ok) {
           const xmlData = await response.text();
           const channel = parsePodcastRssXml(xmlData);
 
           if (channel.episodes && channel.episodes.length > 0) {
-            aggregatedEpisodes.push(...channel.episodes);
-          } else {
-            // Create a show episode entry from the RSS channel metadata if no item enclosures exist yet
-            aggregatedEpisodes.push({
-              guid: url,
-              title: channel.title,
-              description: channel.description || `${channel.title} on Capital FM Kenya`,
-              audioUrl: fallbackStreamUrl,
-              duration: '45:00',
-              publishedAt: new Date().toISOString(),
-              publishedTimestamp: Date.now(),
-              imageUrl: channel.imageUrl || defaultImageUrl,
-            });
+            const validEpisodes = channel.episodes.filter((ep) => ep.audioUrl && ep.audioUrl.trim().length > 0);
+            aggregatedEpisodes.push(...validEpisodes);
           }
         }
       } catch (error) {

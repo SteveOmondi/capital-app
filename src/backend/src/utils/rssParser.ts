@@ -40,12 +40,30 @@ export function parsePodcastRssXml(xmlData: string): PodcastChannel {
   const episodes: PodcastEpisode[] = rawItems.map((item: any) => {
     const guid = item.guid ? (typeof item.guid === 'object' ? item.guid['#text'] : String(item.guid)) : String(Math.random());
     const episodeTitle = item.title ? String(item.title) : 'Untitled Episode';
-    const rawDesc = item.description || item['content:encoded'] || '';
-    const episodeDesc = stripHtml(String(rawDesc));
+    const contentEncoded = typeof item['content:encoded'] === 'string' ? item['content:encoded'] : '';
+    const rawDesc = typeof item.description === 'string' ? item.description : '';
+    const fullHtmlContent = `${contentEncoded} ${rawDesc}`;
+    const episodeDesc = stripHtml(rawDesc || contentEncoded);
 
     // Audio Enclosure extraction
     const enclosure = item.enclosure;
-    const audioUrl = enclosure?.['@_url'] || enclosure?.url || '';
+    let audioUrl = enclosure?.['@_url'] || enclosure?.url || '';
+
+    if (!audioUrl && fullHtmlContent) {
+      const scMatch =
+        fullHtmlContent.match(/https%3A%2F%2Fapi\.soundcloud\.com%2Ftracks%2F\d+/i) ||
+        fullHtmlContent.match(/https:\/\/api\.soundcloud\.com\/tracks\/\d+/i) ||
+        fullHtmlContent.match(/tracks%2F(\d+)/i) ||
+        fullHtmlContent.match(/https?:\/\/[^"'\s\>]+\.(mp3|m4a|aac)/i);
+
+      if (scMatch) {
+        if (scMatch[1] && !scMatch[0].startsWith('http')) {
+          audioUrl = `https://api.soundcloud.com/tracks/${scMatch[1]}`;
+        } else {
+          audioUrl = decodeURIComponent(scMatch[0]);
+        }
+      }
+    }
 
     // Duration extraction
     const duration = item['itunes:duration'] ? String(item['itunes:duration']) : undefined;
