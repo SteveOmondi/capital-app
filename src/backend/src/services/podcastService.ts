@@ -14,7 +14,7 @@ const STREAMGUYS_DEFAULT_RSS_FEEDS = [
 ];
 
 export async function getPodcastChannel(): Promise<PodcastChannel> {
-  const cacheKey = 'podcasts:streamguys:channel:v3';
+  const cacheKey = 'podcasts:streamguys:channel:v4';
 
   // Redis cache check
   if (redis.status === 'ready') {
@@ -56,16 +56,11 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
               aggregatedEpisodes.push(...validEpisodes);
             }
           } else if (channel.title) {
-            // Extract feed slug e.g. "kdeja-thedj-mix" from StreamGuys RSS URL
-            const slugMatch = url.match(/\/([^\/]+)\.xml$/);
-            const feedSlug = slugMatch ? slugMatch[1] : 'mix';
-            const audioFileUrl = `https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/${feedSlug}.mp3`;
-
             aggregatedEpisodes.push({
               guid: url,
               title: channel.title,
               description: channel.description || `${channel.title} Mixmaster Podcast on StreamGuys`,
-              audioUrl: audioFileUrl,
+              audioUrl: 'https://atunwadigital.streamguys1.com/capitalfm',
               duration: '45:00',
               publishedAt: new Date().toISOString(),
               publishedTimestamp: Date.now(),
@@ -106,7 +101,7 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
         guid: 'capital-fm-podcast-jam-984',
         title: 'The Jam 98.4 Highlights',
         description: 'Daily highlights and interviews from The Jam 98.4 on Capital FM Kenya.',
-        audioUrl: 'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/the-jam-984-highlights.mp3',
+        audioUrl: 'https://atunwadigital.streamguys1.com/capitalfm',
         duration: '45:00',
         publishedAt: new Date().toISOString(),
         publishedTimestamp: Date.now(),
