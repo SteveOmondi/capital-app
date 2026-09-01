@@ -118,9 +118,11 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
         publishedTimestamp: Date.now(),
         imageUrl: defaultImageUrl,
       },
-/**
- * Fetches website RSS feed podcasts (SoundCloud / website embedded episodes).
- */
+    ],
+  };
+
+  return fallbackChannel;
+}
 export async function getWebsiteRssPodcastChannel(): Promise<PodcastChannel> {
   const cacheKey = 'podcasts:channel:rss';
 
