@@ -3,6 +3,8 @@ import { parsePodcastRssXml, PodcastChannel } from '../utils/rssParser';
 import { redis } from '../config/redis';
 import { logger } from '../middlewares/logger';
 
+import { getStreamGuysAccessToken } from './streamGuysService';
+
 const STREAMGUYS_DEFAULT_RSS_FEEDS = [
   'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/kdeja-thedj-mix.xml',
   'https://atunwadigital-rss.streamguys1.com/content/capitalfmmixmasters/dj-schwaz-mix.xml',
@@ -14,7 +16,7 @@ const STREAMGUYS_DEFAULT_RSS_FEEDS = [
 ];
 
 export async function getPodcastChannel(): Promise<PodcastChannel> {
-  const cacheKey = 'podcasts:streamguys:channel:v4';
+  const cacheKey = 'podcasts:streamguys:channel:v5';
 
   // Redis cache check
   if (redis.status === 'ready') {
@@ -28,14 +30,67 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
     }
   }
 
+  const defaultImageUrl = 'https://www.capitalfm.africa/wp-content/uploads/2026/05/cropped-cfmlogo-1-150x150.jpg';
+
+  // ----------------------------------------------------
+  // TIER 1: StreamGuys OAuth REST API (Postman Spec)
+  // ----------------------------------------------------
+  try {
+    const token = await getStreamGuysAccessToken();
+    if (token) {
+      const host = config.streamguys.host || 'https://atunwadigital-recast.streamguys1.com';
+      const listApiUrl = `${host.replace(/\/$/, '')}/api/v1/sgrecast/podcasts/feeds`;
+
+      const response = await fetch(listApiUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const apiData: any = await response.json();
+        const items = Array.isArray(apiData) ? apiData : apiData.data || apiData.podcasts || [];
+        if (items.length > 0) {
+          const episodes = items.map((item: any) => ({
+            guid: String(item.id || item.podcast_id || item.guid || Math.random()),
+            title: item.title || item.name || 'Capital FM Podcast',
+            description: item.description || item.summary || 'Capital FM Podcast Show',
+            audioUrl: item.audio_url || item.stream_url || item.url || 'https://atunwadigital.streamguys1.com/capitalfm',
+            duration: item.duration || '45:00',
+            publishedAt: item.created_at || new Date().toISOString(),
+            publishedTimestamp: item.created_at ? new Date(item.created_at).getTime() : Date.now(),
+            imageUrl: item.image_url || item.artwork || defaultImageUrl,
+          }));
+
+          const resultChannel: PodcastChannel = {
+            title: 'Capital FM Kenya Podcasts',
+            description: 'Tune into Capital FM Kenya top podcasts, interviews, and audio shows.',
+            link: 'https://www.capitalfm.africa',
+            imageUrl: defaultImageUrl,
+            episodes,
+          };
+
+          if (redis.status === 'ready') {
+            redis.setex(cacheKey, 900, JSON.stringify(resultChannel)).catch(() => {});
+          }
+          return resultChannel;
+        }
+      }
+    }
+  } catch (error) {
+    logger.warn({ error }, 'StreamGuys REST API Tier 1 call failed, falling back to Tier 2 RSS Gateway');
+  }
+
+  // ----------------------------------------------------
+  // TIER 2: StreamGuys Recast RSS Feeds Gateway
+  // ----------------------------------------------------
   const rawTargetUrl = config.streamguys.podcastRssUrl || config.services.podcastRssUrl;
   const urls = rawTargetUrl
     ? rawTargetUrl.split(',').map((u) => u.trim()).filter(Boolean)
     : STREAMGUYS_DEFAULT_RSS_FEEDS;
 
   const aggregatedEpisodes: any[] = [];
-  const defaultImageUrl = 'https://www.capitalfm.africa/wp-content/uploads/2026/05/cropped-cfmlogo-1-150x150.jpg';
-  const fallbackStreamUrl = config.streamguys.primaryHlsUrl || config.services.liveStreamPrimaryUrl;
 
   await Promise.all(
     urls.map(async (url) => {
@@ -90,7 +145,9 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
     return resultChannel;
   }
 
-  // Graceful fallback channel payload if all RSS fetches failed
+  // ----------------------------------------------------
+  // TIER 3: Fallback Channel Payload
+  // ----------------------------------------------------
   const fallbackChannel: PodcastChannel = {
     title: 'Capital FM Kenya Podcasts',
     description: 'Tune into Capital FM Kenya top podcasts, interviews, and audio shows.',

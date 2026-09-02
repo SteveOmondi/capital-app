@@ -83,3 +83,54 @@ export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig):
     return null;
   }
 }
+
+/**
+ * Authenticates with StreamGuys Recast web session portal using username/password.
+ * Returns Cookie header string e.g. "sgrecast_session=..."
+ */
+export async function getStreamGuysSessionCookie(): Promise<string | null> {
+  const host = config.streamguys.host || 'https://atunwadigital-recast.streamguys1.com';
+  const username = config.streamguys.username || 'kenkipkorir';
+  const password = config.streamguys.password || '$P$BauGLJ5MZftON3OF1/';
+
+  const cacheKey = 'streamguys:session_cookie';
+
+  if (redis.status === 'ready') {
+    try {
+      const cachedCookie = await redis.get(cacheKey);
+      if (cachedCookie) {
+        return cachedCookie;
+      }
+    } catch (_) {}
+  }
+
+  try {
+    const loginUrl = `${host.replace(/\/$/, '')}/login`;
+    const response = await fetch(loginUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        username,
+        password,
+      }).toString(),
+      redirect: 'manual',
+    });
+
+    const setCookie = response.headers.get('set-cookie');
+    if (setCookie) {
+      const match = setCookie.match(/sgrecast_session=[^;]+/);
+      const cookieStr = match ? match[0] : setCookie.split(';')[0];
+
+      if (redis.status === 'ready' && cookieStr) {
+        redis.setex(cacheKey, 7200, cookieStr).catch(() => {});
+      }
+      return cookieStr;
+    }
+  } catch (error) {
+    logger.warn({ error }, 'Failed to authenticate StreamGuys Recast session cookie');
+  }
+
+  return null;
+}
