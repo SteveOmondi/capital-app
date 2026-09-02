@@ -116,6 +116,55 @@
         }
       }
     },
+    "/api/v1/search": {
+      "get": {
+        "summary": "Global Multi-Category News & Podcast Search Gateway",
+        "description": "Performs concurrent full-text search across all news categories (News, Sports, Business, Lifestyle, Entertainment, etc.) and podcast audio episodes.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Full-text search query string (can also be passed as 'query' or 'search')"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "default": "all" },
+            "description": "Filter by news category slug or 'all'"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "default": "all" },
+            "description": "Filter by content type: 'all', 'news', 'podcasts'"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 10 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unified global search results containing news articles and podcast episodes."
+          },
+          "400": {
+            "description": "Missing search query parameter."
+          }
+        }
+      }
+    },
     "/api/v1/schedules": {
       "get": {
         "summary": "Weekly Radio Show Schedules",

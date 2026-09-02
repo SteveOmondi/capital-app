@@ -64,6 +64,55 @@ This document provides complete API contracts, endpoint specifications, JSON DTO
 }
 ```
 
+### 1.3 🔍 Global Multi-Category News & Podcast Search
+- **Endpoint**: `GET /api/v1/search`
+- **Query Params**:
+  - `q` or `query` or `search` (required, full-text query term e.g. `nairobi`, `business`, `dj`)
+  - `category` (optional, e.g. `all`, `sports`, `business`, `lifestyle`, `entertainment`, etc.)
+  - `type` (optional, `all`, `news`, `podcasts`)
+  - `page` (default: 1)
+  - `limit` (default: 10)
+- **Response**:
+```json
+{
+  "status": "success",
+  "data": {
+    "query": "kenya",
+    "totalResults": 15,
+    "news": {
+      "total": 10,
+      "page": 1,
+      "limit": 10,
+      "articles": [
+        {
+          "id": 10452,
+          "slug": "expressway-traffic-restored",
+          "title": "Expressway Traffic Flow Restored",
+          "excerpt": "Traffic flow restored on Expressway following clear lanes.",
+          "categorySlug": "news",
+          "publishedAt": "2026-08-26T14:30:00.000Z"
+        }
+      ]
+    },
+    "podcasts": {
+      "total": 5,
+      "page": 1,
+      "limit": 10,
+      "episodes": [
+        {
+          "guid": "ep-mix-01",
+          "title": "Capital FM DJ Mix Master",
+          "description": "Exclusive Weekend Mix Podcast",
+          "audioUrl": "https://atunwadigital-rss.streamguys1.com/mix.mp3",
+          "duration": "45:00",
+          "publishedAt": "2026-08-26T10:00:00.000Z"
+        }
+      ]
+    }
+  }
+}
+```
+
 ---
 
 ## 2. 🎙️ Podcasts & Audio Playback

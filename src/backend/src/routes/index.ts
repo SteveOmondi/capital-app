@@ -8,6 +8,8 @@ import notificationRoutes from './notifications';
 import userRoutes from './user';
 import swaggerRoutes from './swagger';
 
+import searchRoutes from './search';
+
 const router = Router();
 
 // Interactive Swagger UI at /docs
@@ -20,6 +22,7 @@ router.use('/api/v1', healthRoutes);
 // Content & Audio Gateway Routes
 router.use('/api/v1', newsRoutes);
 router.use('/api/v1', podcastRoutes);
+router.use('/api/v1', searchRoutes);
 router.use('/api/v1', scheduleRoutes);
 router.use('/api/v1', streamRoutes);
 
