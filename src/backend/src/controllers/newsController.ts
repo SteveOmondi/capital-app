@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { getArticles, getNewsCategories } from '../services/wordpressService';
+import { getArticles, getNewsCategories, getTrendingArticles, getArticleBySlug } from '../services/wordpressService';
 
 export async function getNewsHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -33,3 +33,44 @@ export async function getCategoriesHandler(req: Request, res: Response, next: Ne
     next(error);
   }
 }
+
+export async function getTrendingNewsHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const days = req.query.days ? parseInt(String(req.query.days), 10) : 7;
+    const category = req.query.category ? String(req.query.category) : undefined;
+
+    const articles = await getTrendingArticles(days, category);
+    res.status(200).json({
+      status: 'success',
+      data: {
+        total: articles.length,
+        articles,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getArticleDetailHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { idOrSlug } = req.params;
+    const article = await getArticleBySlug(idOrSlug);
+
+    if (!article) {
+      res.status(404).json({
+        status: 'fail',
+        message: `Article '${idOrSlug}' not found`,
+      });
+      return;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: article,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

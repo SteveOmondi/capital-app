@@ -7,6 +7,7 @@ import { redis } from '../config/redis';
 import { logger } from '../middlewares/logger';
 
 export interface StreamConfigDTO {
+  proxyStreamUrl: string;
   primaryHlsUrl: string;
   fallbackAacUrl: string;
   icyStreamUrl: string;
@@ -34,6 +35,95 @@ export interface NowPlayingDTO {
   timestamp: string;
 }
 
+const STREAM_CANDIDATES = [
+  'https://atunwadigital.streamguys1.com/capitalfm',
+  'https://atunwadigital.streamguys1.com/capitalfm/playlist.m3u8',
+];
+
+/**
+ * Live audio stream proxy that automatically recycles and reconnects upstream if a stream drops.
+ */
+export async function proxyLiveAudioStream(req: any, res: any): Promise<void> {
+  const httpModule = await import('http');
+  const httpsModule = await import('https');
+
+  res.writeHead(200, {
+    'Content-Type': 'audio/mpeg',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  let isClientConnected = true;
+  let candidateIndex = 0;
+  let currentUpstreamReq: any = null;
+
+  req.on('close', () => {
+    isClientConnected = false;
+    if (currentUpstreamReq) {
+      try {
+        currentUpstreamReq.destroy();
+      } catch (_) {}
+    }
+  });
+
+  const connectToUpstream = () => {
+    if (!isClientConnected) return;
+
+    const streamUrl = STREAM_CANDIDATES[candidateIndex % STREAM_CANDIDATES.length];
+    logger.info({ streamUrl, candidateIndex }, 'Proxying audio stream to active candidate');
+
+    const clientLib = streamUrl.startsWith('https') ? httpsModule : httpModule;
+
+    currentUpstreamReq = clientLib.get(streamUrl, (upstreamRes: any) => {
+      if (upstreamRes.statusCode && upstreamRes.statusCode >= 400) {
+        logger.warn({ status: upstreamRes.statusCode, streamUrl }, 'Upstream stream returned error status, recycling candidate...');
+        candidateIndex++;
+        setTimeout(connectToUpstream, 1000);
+        return;
+      }
+
+      upstreamRes.on('data', (chunk: Buffer) => {
+        if (isClientConnected) {
+          try {
+            res.write(chunk);
+          } catch (_) {
+            isClientConnected = false;
+          }
+        }
+      });
+
+      upstreamRes.on('end', () => {
+        if (isClientConnected) {
+          logger.warn({ streamUrl }, 'Upstream audio stream ended unexpectedly. Auto-recycling stream connection...');
+          candidateIndex++;
+          setTimeout(connectToUpstream, 1000);
+        }
+      });
+
+      upstreamRes.on('error', (err: any) => {
+        if (isClientConnected) {
+          logger.warn({ err, streamUrl }, 'Upstream stream error encountered. Auto-recycling connection...');
+          candidateIndex++;
+          setTimeout(connectToUpstream, 1000);
+        }
+      });
+    });
+
+    currentUpstreamReq.on('error', (err: any) => {
+      if (isClientConnected) {
+        logger.warn({ err, streamUrl }, 'Failed to connect to upstream stream candidate. Trying next candidate...');
+        candidateIndex++;
+        setTimeout(connectToUpstream, 1000);
+      }
+    });
+  };
+
+  connectToUpstream();
+}
+
 /**
  * Returns stream resolution configuration for Flutter mobile audio players.
  * Authenticates with StreamGuys Recast API if credentials are provided.
@@ -43,6 +133,7 @@ export async function getStreamConfig(): Promise<StreamConfigDTO> {
   const isStreamGuysActive = Boolean(sgToken);
 
   return {
+    proxyStreamUrl: '/api/v1/stream/listen',
     primaryHlsUrl: isStreamGuysActive
       ? config.streamguys.primaryHlsUrl
       : config.services.liveStreamPrimaryUrl,

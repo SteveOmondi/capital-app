@@ -15,6 +15,13 @@ export interface ArticleDTO {
   coverImageUrl?: string;
   publishedAt: string;
   publishedAtTimestamp: number;
+  views?: { total: number; last_7_days: number };
+  wordCount?: number;
+  readingTimeMinutes?: number;
+  trending?: { rank: number; views_in_window: number; window_days: number };
+  seo?: any;
+  share?: any;
+  related?: any[];
 }
 
 export interface CategoryDTO {
@@ -23,6 +30,8 @@ export interface CategoryDTO {
   slug: string;
   count: number;
   description?: string;
+  isVertical?: boolean;
+  children?: CategoryDTO[];
 }
 
 export interface FetchArticlesQuery {
@@ -30,56 +39,53 @@ export interface FetchArticlesQuery {
   page?: number;
   limit?: number;
   search?: string;
+  tag?: string;
+  author?: string;
+  from?: string;
+  to?: string;
+  exclude?: string;
+  orderby?: string;
+  order?: string;
+  fields?: 'summary' | 'full';
 }
 
 const DEFAULT_CATEGORIES: CategoryDTO[] = [
-  { id: 1, name: 'News', slug: 'news', count: 450, description: 'Latest breaking news and national updates' },
-  { id: 2, name: 'Sports', slug: 'sports', count: 210, description: 'Football, athletics and sports coverage' },
-  { id: 3, name: 'Business', slug: 'business', count: 180, description: 'Finance, markets, and economic news' },
-  { id: 4, name: 'Lifestyle', slug: 'lifestyle', count: 150, description: 'Health, travel, food, and culture' },
-  { id: 5, name: 'Entertainment', slug: 'entertainment', count: 120, description: 'Music, movies, and celebrity news' },
-  { id: 6, name: 'Capital Campus', slug: 'capital-campus', count: 90, description: 'Student, university, and youth feature stories' },
-  { id: 7, name: 'Opinion', slug: 'opinion', count: 65, description: 'Commentary, columns, and editorial pieces' },
+  { id: 8, name: 'News', slug: 'news', count: 450, isVertical: true, description: 'Latest breaking news and national updates' },
+  { id: 2, name: 'Sports', slug: 'sports', count: 210, isVertical: true, description: 'Football, athletics and sports coverage' },
+  { id: 3, name: 'Business', slug: 'business', count: 180, isVertical: true, description: 'Finance, markets, and economic news' },
+  { id: 4, name: 'Lifestyle', slug: 'lifestyle', count: 150, isVertical: true, description: 'Health, travel, food, and culture' },
+  { id: 5, name: 'Entertainment', slug: 'entertainment', count: 120, isVertical: true, description: 'Music, movies, and celebrity news' },
+  { id: 6, name: 'Capital Campus', slug: 'capital-campus', count: 90, isVertical: true, description: 'Student, university, and youth feature stories' },
+  { id: 7, name: 'Opinion', slug: 'opinion', count: 65, isVertical: true, description: 'Commentary, columns, and editorial pieces' },
 ];
 
 /**
- * Transforms raw WordPress Post DTO into sanitized ArticleDTO.
+ * Transforms raw Capital FM API article JSON into ArticleDTO.
  */
-function transformWpPost(post: any): ArticleDTO {
-  const title = post.title?.rendered ? stripHtml(post.title.rendered) : 'Untitled';
-  const rawExcerpt = post.excerpt?.rendered || '';
-  const rawContent = post.content?.rendered || '';
+function transformApiArticle(item: any): ArticleDTO {
+  const rawTitle = typeof item.title === 'object' ? item.title?.rendered || item.title?.text || '' : item.title || 'Untitled';
+  const title = stripHtml(rawTitle);
+
+  const rawExcerpt = typeof item.excerpt === 'object' ? item.excerpt?.rendered || '' : item.excerpt || '';
+  const rawContent = typeof item.content === 'object' ? item.content?.html || item.content?.rendered || '' : item.content || '';
 
   const excerpt = stripHtml(rawExcerpt);
-  const content = stripHtml(rawContent);
+  const content = typeof item.content === 'object' && item.content?.html ? item.content.html : stripHtml(rawContent);
 
-  let coverImageUrl: string | undefined;
-  if (post._embedded && post._embedded['wp:featuredmedia']?.[0]?.source_url) {
-    coverImageUrl = post._embedded['wp:featuredmedia'][0].source_url;
+  let coverImageUrl: string | undefined = item.image?.url || item.coverImageUrl;
+  if (!coverImageUrl && item._embedded && item._embedded['wp:featuredmedia']?.[0]?.source_url) {
+    coverImageUrl = item._embedded['wp:featuredmedia'][0].source_url;
   }
 
-  const authorName = post._embedded?.author?.[0]?.name || 'Capital Digital';
-  const dateGmt = post.date_gmt ? `${post.date_gmt}Z` : post.date || new Date().toISOString();
-  const publishedAtTimestamp = new Date(dateGmt).getTime() || Date.now();
+  const authorName = typeof item.author === 'object' ? item.author?.name || 'Capital Digital' : item.author || 'Capital Digital';
+  const pubDateStr = item.published_at || item.publishedAt || item.date || new Date().toISOString();
+  const publishedAtTimestamp = new Date(pubDateStr).getTime() || Date.now();
 
-  // Dynamically extract primary category slug from embedded terms
-  let categorySlug = 'news';
-  const embeddedTerms = post._embedded?.['wp:term']?.[0];
-  if (Array.isArray(embeddedTerms) && embeddedTerms.length > 0) {
-    const matchedTerm = embeddedTerms.find((t: any) =>
-      ['sports', 'business', 'lifestyle', 'entertainment', 'africa', 'capital-campus', 'opinion', 'technology', 'capital-health', 'county-news'].includes(t.slug)
-    ) || embeddedTerms[0];
-
-    if (matchedTerm && matchedTerm.slug) {
-      categorySlug = matchedTerm.slug;
-    }
-  } else if (post.category_slug) {
-    categorySlug = post.category_slug;
-  }
+  const categorySlug = item.primary_category?.slug || item.categorySlug || (Array.isArray(item.categories) && item.categories[0]?.slug) || 'news';
 
   return {
-    id: post.id,
-    slug: post.slug || `article-${post.id}`,
+    id: item.id,
+    slug: item.slug || `article-${item.id}`,
     title,
     excerpt: excerpt || title,
     content,
@@ -88,6 +94,13 @@ function transformWpPost(post: any): ArticleDTO {
     coverImageUrl,
     publishedAt: new Date(publishedAtTimestamp).toISOString(),
     publishedAtTimestamp,
+    views: item.views,
+    wordCount: item.word_count || item.wordCount,
+    readingTimeMinutes: item.reading_time_minutes || item.readingTimeMinutes,
+    trending: item.trending,
+    seo: item.seo,
+    share: item.share,
+    related: item.related,
   };
 }
 
@@ -128,28 +141,11 @@ async function syncArticlesToPostgres(articles: ArticleDTO[]): Promise<void> {
 }
 
 /**
- * List of primary editorial category slugs prioritized for mobile app navigation.
- */
-const PRIORITY_CATEGORY_SLUGS = [
-  'news',
-  'sports',
-  'business',
-  'lifestyle',
-  'entertainment',
-  'lowdown-capital-campus',
-  'capital-campus',
-  'opinion',
-  'africa',
-  'capital-health',
-  'technology',
-];
-
-/**
- * Fetches available news categories with 1-hour Redis caching.
- * Filters out raw WordPress archive tags (such as election years, historical tags).
+ * Fetches main navigation category verticals (/categories) from Capital FM Public API.
+ * Cached in Redis for 1 hour (3600s).
  */
 export async function getNewsCategories(): Promise<CategoryDTO[]> {
-  const cacheKey = 'news:categories';
+  const cacheKey = 'news:categories:verticals';
 
   if (redis.status === 'ready') {
     try {
@@ -157,78 +153,60 @@ export async function getNewsCategories(): Promise<CategoryDTO[]> {
       if (cached) {
         return JSON.parse(cached);
       }
-    } catch (_) {
-      // Ignore cache error
-    }
+    } catch (_) {}
   }
 
+  const url = `${config.services.capitalFmApiBaseUrl}/categories`;
+
   try {
-    const wpUrl = `${config.services.wpCmsBaseUrl}/categories?per_page=100&hide_empty=true`;
-    const response = await fetch(wpUrl);
+    const response = await fetch(url);
     if (response.ok) {
       const rawCategories = (await response.json()) as any[];
-      if (Array.isArray(rawCategories) && rawCategories.length > 0) {
-        // Filter out numeric election years, tags starting with numbers or uppercase acronyms
-        const filtered = rawCategories
-          .map((cat) => ({
-            id: cat.id,
-            name: stripHtml(cat.name || ''),
-            slug: cat.slug || '',
-            count: cat.count || 0,
-            description: cat.description ? stripHtml(cat.description) : undefined,
-          }))
-          .filter((c) => {
-            if (!c.slug || !c.name || c.count < 5) return false;
-            // Exclude tags starting with numbers (e.g. 2016-us-election, 2027-kenya-elections, 9-11)
-            if (/^\d/.test(c.slug) || /^\d/.test(c.name)) return false;
-            // Exclude common archived tag patterns
-            if (/election/i.test(c.slug) || /afcon/i.test(c.slug) || /auc-race/i.test(c.slug)) return false;
-            return true;
-          });
+      const categoriesArray = Array.isArray(rawCategories) ? rawCategories : (rawCategories as any).data || [];
 
-        // Sort priority categories first
-        filtered.sort((a, b) => {
-          const indexA = PRIORITY_CATEGORY_SLUGS.indexOf(a.slug);
-          const indexB = PRIORITY_CATEGORY_SLUGS.indexOf(b.slug);
-          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-          if (indexA !== -1) return -1;
-          if (indexB !== -1) return 1;
-          return b.count - a.count;
-        });
+      if (categoriesArray.length > 0) {
+        const mapped: CategoryDTO[] = categoriesArray.map((cat: any) => ({
+          id: cat.id,
+          name: stripHtml(cat.name || ''),
+          slug: cat.slug || '',
+          count: cat.count || 0,
+          isVertical: cat.is_vertical ?? true,
+          description: cat.description ? stripHtml(cat.description) : undefined,
+          children: Array.isArray(cat.children)
+            ? cat.children.map((child: any) => ({
+                id: child.id,
+                name: stripHtml(child.name || ''),
+                slug: child.slug || '',
+                count: child.count || 0,
+                isVertical: child.is_vertical ?? false,
+              }))
+            : undefined,
+        }));
 
-        if (filtered.length > 0) {
-          if (redis.status === 'ready') {
-            redis.setex(cacheKey, 3600, JSON.stringify(filtered)).catch(() => {});
-          }
-          return filtered;
+        if (redis.status === 'ready') {
+          redis.setex(cacheKey, 3600, JSON.stringify(mapped)).catch(() => {});
         }
+        return mapped;
       }
     }
   } catch (error) {
-    logger.warn({ error }, 'Failed to fetch categories from WordPress REST API. Serving default categories.');
+    logger.warn({ error }, 'Failed to fetch categories from Capital FM Public API. Serving default categories.');
   }
 
   return DEFAULT_CATEGORIES;
 }
 
 /**
- * Helper to get WordPress Category ID by category slug.
- */
-async function getCategoryIdBySlug(slug: string): Promise<number | undefined> {
-  const categories = await getNewsCategories();
-  const found = categories.find((c) => c.slug.toLowerCase() === slug.toLowerCase());
-  return found?.id;
-}
-
-/**
- * Fetches news articles with support for Category filtering, Pagination, Redis Caching, and Full-Text Search.
+ * Fetches articles collection (/articles) with filtering, pagination, Redis caching & FTS fallback.
  */
 export async function getArticles(params: FetchArticlesQuery): Promise<{ articles: ArticleDTO[]; total: number; page: number; limit: number }> {
   const page = Math.max(1, params.page || 1);
   const limit = Math.min(50, Math.max(1, params.limit || 10));
   const category = params.category || 'all';
   const search = params.search?.trim();
+  const fields = params.fields || 'summary';
 
+  // 1. Check PostgreSQL Full Text Search if search query present
   if (search && search.length > 0) {
     try {
       const skip = (page - 1) * limit;
@@ -275,42 +253,48 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
     }
   }
 
-  const cacheKey = `articles:${category}:page:${page}:limit:${limit}`;
+  // 2. Check Redis Cache
+  const cacheKey = `articles:${category}:page:${page}:limit:${limit}:${fields}:${search || ''}`;
   if (!search && redis.status === 'ready') {
     try {
       const cached = await redis.get(cacheKey);
       if (cached) {
         return JSON.parse(cached);
       }
-    } catch (_) {
-      // Ignore cache read error
-    }
+    } catch (_) {}
   }
 
-  let wpUrl = `${config.services.wpCmsBaseUrl}/posts?_embed=true&page=${page}&per_page=${limit}`;
+  // 3. Query Capital FM Public API
+  const queryParams = new URLSearchParams();
+  queryParams.set('page', String(page));
+  queryParams.set('per_page', String(limit));
+  queryParams.set('fields', fields);
 
-  if (category !== 'all') {
-    const catId = await getCategoryIdBySlug(category);
-    if (catId) {
-      wpUrl += `&categories=${catId}`;
-    }
-  }
+  if (category !== 'all') queryParams.set('category', category);
+  if (search) queryParams.set('search', search);
+  if (params.tag) queryParams.set('tag', params.tag);
+  if (params.author) queryParams.set('author', params.author);
+  if (params.from) queryParams.set('from', params.from);
+  if (params.to) queryParams.set('to', params.to);
+  if (params.exclude) queryParams.set('exclude', params.exclude);
+  if (params.orderby) queryParams.set('orderby', params.orderby);
+  if (params.order) queryParams.set('order', params.order);
 
-  if (search) {
-    wpUrl += `&search=${encodeURIComponent(search)}`;
-  }
+  const url = `${config.services.capitalFmApiBaseUrl}/articles?${queryParams.toString()}`;
 
   try {
-    const response = await fetch(wpUrl);
+    const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`WordPress API returned status ${response.status}`);
+      throw new Error(`Capital FM Articles API returned status ${response.status}`);
     }
 
-    const totalHeader = response.headers.get('X-WP-Total');
-    const total = totalHeader ? parseInt(totalHeader, 10) : 0;
+    const totalHeader = response.headers.get('X-WP-Total') || response.headers.get('meta.total');
+    const json = (await response.json()) as any;
 
-    const rawPosts = (await response.json()) as any[];
-    const articles = rawPosts.map((post) => transformWpPost(post));
+    const rawPosts = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
+    const total = json.meta?.total !== undefined ? json.meta.total : totalHeader ? parseInt(totalHeader, 10) : rawPosts.length;
+
+    const articles = rawPosts.map((post: any) => transformApiArticle(post));
 
     syncArticlesToPostgres(articles);
 
@@ -322,8 +306,9 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
 
     return result;
   } catch (error) {
-    logger.error({ error, wpUrl }, 'Failed to fetch articles from WordPress API');
+    logger.error({ error, url }, 'Failed to fetch articles from Capital FM Public API');
 
+    // DB Fallback
     try {
       const skip = (page - 1) * limit;
       const dbArticles = await prisma.article.findMany({
@@ -349,5 +334,91 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
     } catch (_) {
       throw error;
     }
+  }
+}
+
+/**
+ * Fetches trending articles (/articles/trending) based on rolling views window.
+ * Cached in Redis for 10 minutes (600s).
+ */
+export async function getTrendingArticles(days: number = 7, category?: string): Promise<ArticleDTO[]> {
+  const cacheKey = `articles:trending:days:${days}:cat:${category || 'all'}`;
+
+  if (redis.status === 'ready') {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (_) {}
+  }
+
+  let url = `${config.services.capitalFmApiBaseUrl}/articles/trending?days=${days}`;
+  if (category) {
+    url += `&category=${encodeURIComponent(category)}`;
+  }
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Trending Articles API returned status ${response.status}`);
+    }
+
+    const json = (await response.json()) as any;
+    const rawItems = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
+
+    const articles = rawItems.map((item: any) => transformApiArticle(item));
+
+    if (redis.status === 'ready' && articles.length > 0) {
+      redis.setex(cacheKey, 600, JSON.stringify(articles)).catch(() => {});
+    }
+
+    return articles;
+  } catch (error) {
+    logger.error({ error, url }, 'Failed to fetch trending articles');
+    return [];
+  }
+}
+
+/**
+ * Fetches single article by ID or Slug (/articles/{id-or-slug}).
+ * Returns full payload including content.html, seo, share, and related[].
+ */
+export async function getArticleBySlug(idOrSlug: string): Promise<ArticleDTO | null> {
+  const cacheKey = `articles:detail:${idOrSlug}`;
+
+  if (redis.status === 'ready') {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (_) {}
+  }
+
+  const url = `${config.services.capitalFmApiBaseUrl}/articles/${encodeURIComponent(idOrSlug)}`;
+
+  try {
+    const response = await fetch(url);
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(`Article detail API returned status ${response.status}`);
+    }
+
+    const json = (await response.json()) as any;
+    const rawData = json.data || json;
+
+    const article = transformApiArticle(rawData);
+
+    if (redis.status === 'ready' && article) {
+      redis.setex(cacheKey, 300, JSON.stringify(article)).catch(() => {});
+    }
+
+    return article;
+  } catch (error) {
+    logger.error({ error, url, idOrSlug }, 'Failed to fetch single article detail from Capital FM API');
+    return null;
   }
 }

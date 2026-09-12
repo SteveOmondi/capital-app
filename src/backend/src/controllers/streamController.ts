@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { getStreamConfig, getNowPlayingTrack } from '../services/streamService';
+import { getStreamConfig, getNowPlayingTrack, proxyLiveAudioStream } from '../services/streamService';
 
 export async function getStreamConfigHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -24,3 +24,12 @@ export async function getNowPlayingHandler(req: Request, res: Response, next: Ne
     next(error);
   }
 }
+
+export async function streamProxyHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    await proxyLiveAudioStream(req, res);
+  } catch (error) {
+    next(error);
+  }
+}
+

@@ -80,6 +80,7 @@ stages:
               REDIS_PORT: $(REDIS_PORT)
               REDIS_PASSWORD: $(REDIS_PASSWORD)
               WP_WEBHOOK_SECRET: $(WP_WEBHOOK_SECRET)
+              CAPITALFM_PUBLIC_API_BASE_URL: $(CAPITALFM_PUBLIC_API_BASE_URL)
               WP_CMS_BASE_URL: $(WP_CMS_BASE_URL)
               PODCAST_RSS_URL: $(PODCAST_RSS_URL)
               LIVE_STREAM_PRIMARY_URL: $(LIVE_STREAM_PRIMARY_URL)
@@ -183,6 +184,7 @@ stages:
                       REDIS_PORT="$(REDIS_PORT)" \
                       REDIS_PASSWORD="$(REDIS_PASSWORD)" \
                       WP_WEBHOOK_SECRET="$(WP_WEBHOOK_SECRET)" \
+                      CAPITALFM_PUBLIC_API_BASE_URL="$(CAPITALFM_PUBLIC_API_BASE_URL)" \
                       WP_CMS_BASE_URL="$(WP_CMS_BASE_URL)" \
                       PODCAST_RSS_URL="$(PODCAST_RSS_URL)" \
                       LIVE_STREAM_PRIMARY_URL="$(LIVE_STREAM_PRIMARY_URL)" \

@@ -4,6 +4,8 @@ import newsRoutes from './news';
 import podcastRoutes from './podcasts';
 import scheduleRoutes from './schedules';
 import streamRoutes from './stream';
+import eventRoutes from './events';
+import presenterRoutes from './presenters';
 import notificationRoutes from './notifications';
 import userRoutes from './user';
 import swaggerRoutes from './swagger';
@@ -21,6 +23,8 @@ router.use('/api/v1', healthRoutes);
 
 // Content & Audio Gateway Routes
 router.use('/api/v1', newsRoutes);
+router.use('/api/v1', eventRoutes);
+router.use('/api/v1', presenterRoutes);
 router.use('/api/v1', podcastRoutes);
 router.use('/api/v1', searchRoutes);
 router.use('/api/v1', scheduleRoutes);

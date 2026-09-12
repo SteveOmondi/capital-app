@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { getWeeklySchedules } from '../services/scheduleService';
+import { getWeeklySchedules, getScheduleNow } from '../services/scheduleService';
 
 export async function getSchedulesHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -14,3 +14,17 @@ export async function getSchedulesHandler(req: Request, res: Response, next: Nex
     next(error);
   }
 }
+
+export async function getScheduleNowHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const data = await getScheduleNow();
+    res.status(200).json({
+      status: 'success',
+      data: data.data,
+      meta: data.meta,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
