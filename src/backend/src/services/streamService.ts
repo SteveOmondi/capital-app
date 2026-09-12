@@ -176,11 +176,19 @@ function formatProxyUrl(baseUrl?: string, path: string = '/api/v1/stream/listen'
     return `${defaultHost.replace(/\/$/, '')}${path}`;
   }
 
-  const cleanBase = baseUrl.replace(/\/$/, '');
-  if (/^https?:\/\//i.test(cleanBase)) {
-    return `${cleanBase}${path}`;
+  let cleanBase = baseUrl.trim().replace(/\/$/, '');
+
+  // Force HTTPS for all non-local domains (Azure Container Apps terminates SSL at ingress)
+  if (!cleanBase.includes('localhost') && !cleanBase.includes('127.0.0.1')) {
+    cleanBase = cleanBase.replace(/^http:\/\//i, 'https://');
+    if (!/^https:\/\//i.test(cleanBase)) {
+      cleanBase = `https://${cleanBase}`;
+    }
+  } else if (!/^https?:\/\//i.test(cleanBase)) {
+    cleanBase = `http://${cleanBase}`;
   }
-  return `https://${cleanBase}${path}`;
+
+  return `${cleanBase}${path}`;
 }
 
 /**

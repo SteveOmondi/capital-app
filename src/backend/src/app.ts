@@ -10,6 +10,9 @@ import routes from './routes';
 export function createApp(): Express {
   const app = express();
 
+  // Trust reverse proxy (Azure Container Apps / NGINX / Cloudflare)
+  app.set('trust proxy', true);
+
   // Security Headers & CORS
   app.use(helmet());
   app.use(
