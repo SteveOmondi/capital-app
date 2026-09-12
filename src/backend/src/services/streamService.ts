@@ -38,7 +38,6 @@ export interface NowPlayingDTO {
 
 const STREAM_CANDIDATES = [
   'https://atunwadigital.streamguys1.com/capitalfm',
-  'https://atunwadigital.streamguys1.com/capitalfm/playlist.m3u8',
 ];
 
 /**
