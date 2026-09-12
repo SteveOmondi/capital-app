@@ -170,16 +170,29 @@ export async function proxyLiveAudioStream(req: any, res: any): Promise<void> {
   connectToUpstream();
 }
 
+function formatProxyUrl(baseUrl?: string, path: string = '/api/v1/stream/listen'): string {
+  if (!baseUrl || baseUrl.trim().length === 0) {
+    const defaultHost = process.env.PUBLIC_BASE_URL || 'https://ca-capital-backend-api.salmonwave-7494888b.eastus.azurecontainerapps.io';
+    return `${defaultHost.replace(/\/$/, '')}${path}`;
+  }
+
+  const cleanBase = baseUrl.replace(/\/$/, '');
+  if (/^https?:\/\//i.test(cleanBase)) {
+    return `${cleanBase}${path}`;
+  }
+  return `https://${cleanBase}${path}`;
+}
+
 /**
  * Returns stream resolution configuration for Flutter mobile audio players.
  * Authenticates with StreamGuys Recast API if credentials are provided.
  */
-export async function getStreamConfig(): Promise<StreamConfigDTO> {
+export async function getStreamConfig(baseUrl?: string): Promise<StreamConfigDTO> {
   const sgToken = await getStreamGuysAccessToken();
   const isStreamGuysActive = Boolean(sgToken);
 
   return {
-    proxyStreamUrl: '/api/v1/stream/listen',
+    proxyStreamUrl: formatProxyUrl(baseUrl, '/api/v1/stream/listen'),
     primaryHlsUrl: isStreamGuysActive
       ? config.streamguys.primaryHlsUrl
       : config.services.liveStreamPrimaryUrl,
@@ -207,8 +220,8 @@ export async function getStreamConfig(): Promise<StreamConfigDTO> {
 /**
  * Returns the currently playing track with album cover art enrichment.
  */
-export async function getNowPlayingTrack(): Promise<NowPlayingDTO> {
-  const cacheKey = 'stream:nowplaying';
+export async function getNowPlayingTrack(baseUrl?: string): Promise<NowPlayingDTO> {
+  const cacheKey = `stream:nowplaying:${baseUrl || 'default'}`;
 
   // Redis cache check (short TTL: 5 seconds)
   if (redis.status === 'ready') {
@@ -253,7 +266,7 @@ export async function getNowPlayingTrack(): Promise<NowPlayingDTO> {
   const parsed = parseIcyMetadataString(rawMetadataString);
   const enriched = await fetchAlbumArtwork(parsed.artist, parsed.title);
   const [streamConfig, currentShow] = await Promise.all([
-    getStreamConfig(),
+    getStreamConfig(baseUrl),
     getCurrentLiveShow(),
   ]);
 
