@@ -31,6 +31,7 @@ export interface NowPlayingDTO {
   show?: ShowSlot | null;
   streamUrl: string;
   fallbackStreamUrl?: string;
+  proxyStreamUrl?: string;
   provider?: string;
   timestamp: string;
 }
@@ -226,6 +227,7 @@ export async function getNowPlayingTrack(): Promise<NowPlayingDTO> {
     },
     streamUrl: streamConfig.primaryHlsUrl,
     fallbackStreamUrl: streamConfig.fallbackAacUrl,
+    proxyStreamUrl: streamConfig.proxyStreamUrl,
     provider: streamConfig.provider,
     timestamp: formatEatIsoString(),
   };
