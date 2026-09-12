@@ -42,24 +42,32 @@ const STREAM_CANDIDATES = [
 ];
 
 /**
- * Live audio stream proxy that automatically recycles and reconnects upstream if a stream drops.
+ * Live audio stream proxy optimized for Mobile Browsers (iOS Safari / Android Chrome) and Flutter Audio Players.
+ * Strips ICY metadata frames to prevent browser HTML5 audio decoder stalls and handles auto-recycling.
  */
 export async function proxyLiveAudioStream(req: any, res: any): Promise<void> {
   const httpModule = await import('http');
   const httpsModule = await import('https');
+  const { URL } = await import('url');
 
-  res.writeHead(200, {
-    'Content-Type': 'audio/mpeg',
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
-    'Pragma': 'no-cache',
-    'Expires': '0',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
-  });
+  // Handle HEAD preflight requests from mobile browser HTML5 <audio> tags
+  if (req.method === 'HEAD') {
+    res.writeHead(200, {
+      'Content-Type': 'audio/mpeg',
+      'Accept-Ranges': 'none',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end();
+    return;
+  }
 
   let isClientConnected = true;
   let candidateIndex = 0;
   let currentUpstreamReq: any = null;
+  let headersSent = false;
 
   req.on('close', () => {
     isClientConnected = false;
@@ -76,50 +84,87 @@ export async function proxyLiveAudioStream(req: any, res: any): Promise<void> {
     const streamUrl = STREAM_CANDIDATES[candidateIndex % STREAM_CANDIDATES.length];
     logger.info({ streamUrl, candidateIndex }, 'Proxying audio stream to active candidate');
 
-    const clientLib = streamUrl.startsWith('https') ? httpsModule : httpModule;
+    try {
+      const parsedUrl = new URL(streamUrl);
+      const isHttps = streamUrl.startsWith('https');
+      const clientLib = isHttps ? httpsModule : httpModule;
 
-    currentUpstreamReq = clientLib.get(streamUrl, (upstreamRes: any) => {
-      if (upstreamRes.statusCode && upstreamRes.statusCode >= 400) {
-        logger.warn({ status: upstreamRes.statusCode, streamUrl }, 'Upstream stream returned error status, recycling candidate...');
-        candidateIndex++;
-        setTimeout(connectToUpstream, 1000);
-        return;
-      }
+      const requestOptions = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (isHttps ? 443 : 80),
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: 'GET',
+        headers: {
+          'Icy-MetaData': '0', // Force clean audio stream without ICY metadata frames that break HTML5 audio decoders
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+          'Accept': '*/*',
+          'Connection': 'keep-alive',
+        },
+      };
 
-      upstreamRes.on('data', (chunk: Buffer) => {
-        if (isClientConnected) {
-          try {
-            res.write(chunk);
-          } catch (_) {
-            isClientConnected = false;
+      currentUpstreamReq = clientLib.request(requestOptions, (upstreamRes: any) => {
+        if (upstreamRes.statusCode && upstreamRes.statusCode >= 400) {
+          logger.warn({ status: upstreamRes.statusCode, streamUrl }, 'Upstream stream returned error status, recycling candidate...');
+          candidateIndex++;
+          setTimeout(connectToUpstream, 1000);
+          return;
+        }
+
+        if (!headersSent && isClientConnected) {
+          const contentType = upstreamRes.headers['content-type'] || 'audio/mpeg';
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Accept-Ranges': 'none',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+          });
+          headersSent = true;
+        }
+
+        upstreamRes.on('data', (chunk: Buffer) => {
+          if (isClientConnected) {
+            try {
+              res.write(chunk);
+            } catch (_) {
+              isClientConnected = false;
+            }
           }
-        }
+        });
+
+        upstreamRes.on('end', () => {
+          if (isClientConnected) {
+            logger.warn({ streamUrl }, 'Upstream audio stream ended unexpectedly. Auto-recycling stream connection...');
+            candidateIndex++;
+            setTimeout(connectToUpstream, 1000);
+          }
+        });
+
+        upstreamRes.on('error', (err: any) => {
+          if (isClientConnected) {
+            logger.warn({ err, streamUrl }, 'Upstream stream error encountered. Auto-recycling connection...');
+            candidateIndex++;
+            setTimeout(connectToUpstream, 1000);
+          }
+        });
       });
 
-      upstreamRes.on('end', () => {
+      currentUpstreamReq.on('error', (err: any) => {
         if (isClientConnected) {
-          logger.warn({ streamUrl }, 'Upstream audio stream ended unexpectedly. Auto-recycling stream connection...');
+          logger.warn({ err, streamUrl }, 'Failed to connect to upstream stream candidate. Trying next candidate...');
           candidateIndex++;
           setTimeout(connectToUpstream, 1000);
         }
       });
 
-      upstreamRes.on('error', (err: any) => {
-        if (isClientConnected) {
-          logger.warn({ err, streamUrl }, 'Upstream stream error encountered. Auto-recycling connection...');
-          candidateIndex++;
-          setTimeout(connectToUpstream, 1000);
-        }
-      });
-    });
-
-    currentUpstreamReq.on('error', (err: any) => {
-      if (isClientConnected) {
-        logger.warn({ err, streamUrl }, 'Failed to connect to upstream stream candidate. Trying next candidate...');
-        candidateIndex++;
-        setTimeout(connectToUpstream, 1000);
-      }
-    });
+      currentUpstreamReq.end();
+    } catch (err) {
+      logger.error({ err, streamUrl }, 'Error creating upstream request options');
+      candidateIndex++;
+      setTimeout(connectToUpstream, 1000);
+    }
   };
 
   connectToUpstream();
