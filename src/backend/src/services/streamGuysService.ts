@@ -17,20 +17,22 @@ export interface StreamGuysConfig {
 }
 
 /**
- * Obtains an OAuth Bearer token from StreamGuys Recast API using Client Credentials grant.
+ * Obtains an OAuth Bearer token from StreamGuys Recast API using Password grant (`grant_type: "password"`).
  * Caches the token in Redis to minimize authentication roundtrips.
  */
 export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig): Promise<string | null> {
   const host = customConfig?.host || config.streamguys.host;
   const clientId = customConfig?.clientId || config.streamguys.clientId;
   const clientSecret = customConfig?.clientSecret || config.streamguys.clientSecret;
+  const username = customConfig?.username || config.streamguys.username;
+  const password = customConfig?.password || config.streamguys.password;
 
-  if (!clientId || !clientSecret) {
-    logger.debug('StreamGuys Client ID or Secret missing. Skipping StreamGuys OAuth authentication.');
+  if (!clientId || !clientSecret || !username || !password) {
+    logger.debug('StreamGuys Client ID, Secret, Username, or Password missing. Skipping StreamGuys OAuth authentication.');
     return null;
   }
 
-  const cacheKey = `streamguys:token:${clientId}`;
+  const cacheKey = `streamguys:token:${clientId}:${username}`;
 
   // 1. Check Redis Cache
   if (redis.status === 'ready') {
@@ -44,7 +46,7 @@ export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig):
     }
   }
 
-  // 2. Request new Bearer Token from StreamGuys OAuth endpoint
+  // 2. Request new Bearer Token from StreamGuys OAuth endpoint using Password Grant
   try {
     const tokenUrl = `${host.replace(/\/$/, '')}/oauth/token`;
     const response = await fetch(tokenUrl, {
@@ -54,9 +56,11 @@ export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig):
         'Accept': 'application/json',
       },
       body: JSON.stringify({
-        grant_type: 'client_credentials',
+        grant_type: 'password',
         client_id: clientId,
         client_secret: clientSecret,
+        username: username,
+        password: password,
         scope: '*',
       }),
     });
@@ -76,7 +80,7 @@ export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig):
       redis.setex(cacheKey, Math.max(60, expiresIn - 60), accessToken).catch(() => {});
     }
 
-    logger.info('Successfully authenticated with StreamGuys Recast API');
+    logger.info('Successfully authenticated with StreamGuys Recast API via Password Grant');
     return accessToken;
   } catch (error) {
     logger.error({ error }, 'Error connecting to StreamGuys OAuth API');
