@@ -33,7 +33,7 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
   const defaultImageUrl = 'https://www.capitalfm.africa/wp-content/uploads/2026/05/cropped-cfmlogo-1-150x150.jpg';
 
   // ----------------------------------------------------
-  // TIER 1: StreamGuys OAuth REST API (Postman Spec)
+  // TIER 1: StreamGuys OAuth REST API (Primary Option)
   // ----------------------------------------------------
   try {
     const token = await getStreamGuysAccessToken();
@@ -52,16 +52,47 @@ export async function getPodcastChannel(): Promise<PodcastChannel> {
         const apiData: any = await response.json();
         const items = Array.isArray(apiData) ? apiData : apiData.data || apiData.podcasts || [];
         if (items.length > 0) {
-          const episodes = items.map((item: any) => ({
-            guid: String(item.id || item.podcast_id || item.guid || Math.random()),
-            title: item.title || item.name || 'Capital FM Podcast',
-            description: item.description || item.summary || 'Capital FM Podcast Show',
-            audioUrl: item.audio_url || item.stream_url || item.url || 'https://atunwadigital.streamguys1.com/capitalfm',
-            duration: item.duration || '45:00',
-            publishedAt: item.created_at || new Date().toISOString(),
-            publishedTimestamp: item.created_at ? new Date(item.created_at).getTime() : Date.now(),
-            imageUrl: item.image_url || item.artwork || defaultImageUrl,
-          }));
+          logger.info({ count: items.length }, 'Successfully retrieved podcasts from StreamGuys REST API (Tier 1)');
+
+          const episodes = await Promise.all(
+            items.map(async (item: any) => {
+              let audioUrl = item.audio_url || item.stream_url || item.url || 'https://atunwadigital.streamguys1.com/capitalfm';
+              let duration = item.duration || '45:00';
+              let description = item.description || item.summary || `${item.name || 'Capital FM Podcast'} Show`;
+
+              // If podcast item has an associated RSS feed URL, attempt to parse live audio enclosure
+              if (item.rssFeed) {
+                try {
+                  const feedRes = await fetch(item.rssFeed, {
+                    headers: { 'User-Agent': 'CapitalFM-App/1.0' },
+                  });
+                  if (feedRes.ok) {
+                    const xml = await feedRes.text();
+                    const parsedChannel = parsePodcastRssXml(xml);
+                    if (parsedChannel.episodes && parsedChannel.episodes.length > 0) {
+                      const topEp = parsedChannel.episodes[0];
+                      if (topEp.audioUrl) audioUrl = topEp.audioUrl;
+                      if (topEp.duration) duration = topEp.duration;
+                      if (topEp.description) description = topEp.description;
+                    }
+                  }
+                } catch (_) {
+                  // Fall back to API default properties
+                }
+              }
+
+              return {
+                guid: String(item.id || item.guid || Math.random()),
+                title: item.name || item.title || 'Capital FM Podcast',
+                description,
+                audioUrl,
+                duration,
+                publishedAt: item.createdAt || item.created_at || new Date().toISOString(),
+                publishedTimestamp: item.createdAtTimestamp ? item.createdAtTimestamp * 1000 : Date.now(),
+                imageUrl: item.image || item.image_url || item.artwork || defaultImageUrl,
+              };
+            })
+          );
 
           const resultChannel: PodcastChannel = {
             title: 'Capital FM Kenya Podcasts',
