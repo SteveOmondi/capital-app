@@ -39,6 +39,10 @@ variables:
   - name: azureLocation
     value: 'southafricanorth'
 
+  # Firebase PKCS12 Secure File Name
+  - name: FIREBASE_P12_SECURE_FILE_NAME
+    value: 'capitalfmapp-12169-8f7afd5cc58a.p12'
+
 stages:
   # =========================================================================
   # STAGE 1: Continuous Integration (Test & Build)
@@ -71,6 +75,17 @@ stages:
               npx tsc --noEmit
             displayName: 'Check TypeScript Compilation'
 
+          - task: DownloadSecureFile@1
+            name: firebaseCert
+            displayName: 'Download Firebase PKCS12 Certificate'
+            inputs:
+              secureFile: '$(FIREBASE_P12_SECURE_FILE_NAME)'
+
+          - script: |
+              P12_B64=$(base64 -w 0 $(firebaseCert.secureFilePath))
+              echo "##vso[task.setvariable variable=FIREBASE_P12_BASE64;isSecret=true]$P12_B64"
+            displayName: 'Encode PKCS12 Certificate for Production Deployment'
+
           - script: |
               cd src/backend
               npm test
@@ -89,6 +104,9 @@ stages:
               FIREBASE_PROJECT_ID: $(FIREBASE_PROJECT_ID)
               FIREBASE_CLIENT_EMAIL: $(FIREBASE_CLIENT_EMAIL)
               FIREBASE_PRIVATE_KEY: $(FIREBASE_PRIVATE_KEY)
+              FIREBASE_P12_PATH: $(firebaseCert.secureFilePath)
+              FIREBASE_P12_PASSPHRASE: $(FIREBASE_P12_PASSPHRASE)
+              FIREBASE_P12_BASE64: $(FIREBASE_P12_BASE64)
               STREAMGUYS_HOST: $(STREAMGUYS_HOST)
               STREAMGUYS_CLIENT_ID: $(STREAMGUYS_CLIENT_ID)
               STREAMGUYS_CLIENT_SECRET: $(STREAMGUYS_CLIENT_SECRET)
@@ -193,6 +211,8 @@ stages:
                       FIREBASE_PROJECT_ID="$(FIREBASE_PROJECT_ID)" \
                       FIREBASE_CLIENT_EMAIL="$(FIREBASE_CLIENT_EMAIL)" \
                       FIREBASE_PRIVATE_KEY="$(FIREBASE_PRIVATE_KEY)" \
+                      FIREBASE_P12_PASSPHRASE="$(FIREBASE_P12_PASSPHRASE)" \
+                      FIREBASE_P12_BASE64="$(FIREBASE_P12_BASE64)" \
                       STREAMGUYS_HOST="$(STREAMGUYS_HOST)" \
                       STREAMGUYS_CLIENT_ID="$(STREAMGUYS_CLIENT_ID)" \
                       STREAMGUYS_CLIENT_SECRET="$(STREAMGUYS_CLIENT_SECRET)" \
