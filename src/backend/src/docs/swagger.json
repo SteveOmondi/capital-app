@@ -295,10 +295,81 @@
           }
         }
       }
+    },
+    "/api/v1/webhooks/wordpress/post-published": {
+      "post": {
+        "summary": "Webhook: WordPress Article Published",
+        "description": "Triggered by WordPress CMS when a new news article is published. Dispatches breaking news push notification to subscribers.",
+        "security": [{ "WebhookSecretHeader": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "postId": { "type": "integer", "example": 10452 },
+                  "title": { "type": "string", "example": "Expressway Traffic Flow Restored" },
+                  "excerpt": { "type": "string", "example": "Traffic flow restored on Expressway following clear lanes." },
+                  "category": { "type": "string", "example": "breaking_news" },
+                  "slug": { "type": "string", "example": "expressway-traffic-restored" },
+                  "coverImageUrl": { "type": "string", "example": "https://www.capitalfm.africa/wp-content/uploads/2026/08/traffic.jpg" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Push notification dispatched successfully."
+          },
+          "401": {
+            "description": "Unauthorized webhook request. Invalid x-webhook-secret header."
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/podcasts/episode-published": {
+      "post": {
+        "summary": "Webhook: Podcast Episode Uploaded / Published",
+        "description": "Triggered by WordPress or CMS when a new podcast episode is uploaded/published. Dispatches FCM push notification to podcast subscribers.",
+        "security": [{ "WebhookSecretHeader": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "podcastId": { "type": "string", "example": "financial-fitness" },
+                  "episodeId": { "type": "string", "example": "ep-42" },
+                  "title": { "type": "string", "example": "The Financial Fitness Masterclass Ep 42" },
+                  "description": { "type": "string", "example": "Expert advice on personal wealth management." },
+                  "audioUrl": { "type": "string", "example": "https://stream.capitalfm.africa/podcasts/ep42.mp3" },
+                  "coverImageUrl": { "type": "string", "example": "https://www.capitalfm.africa/podcasts/covers/ep42.jpg" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Podcast push notification dispatched successfully."
+          },
+          "401": {
+            "description": "Unauthorized webhook request. Invalid x-webhook-secret header."
+          }
+        }
+      }
     }
   },
   "components": {
     "securitySchemes": {
+      "WebhookSecretHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-webhook-secret"
+      },
       "UserEmailHeader": {
         "type": "apiKey",
         "in": "header",
