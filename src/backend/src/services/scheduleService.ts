@@ -97,6 +97,32 @@ export function getTodayName(): string {
   return days[eatDate.getDay()];
 }
 
+export interface LiveStateDTO {
+  meta: {
+    timezone: string;
+    generated_at: string;
+    api_version?: string;
+  };
+  data: {
+    radio: {
+      is_live: boolean;
+      stream_url: string;
+      show: string;
+      host: string;
+      ends_at: string;
+    };
+    youtube: {
+      is_live: boolean;
+      video_id: string | null;
+      channel_id: string | null;
+      title: string | null;
+      watch_url: string | null;
+      embed_url: string | null;
+    };
+    checked_at: string;
+  };
+}
+
 /**
  * Fetches real-time live radio state (/schedule/now) from Capital FM Public API.
  * Live calculation (seconds_remaining, progress, on_air, up_next) is performed server-side in EAT.
@@ -165,6 +191,65 @@ export async function getScheduleNow(): Promise<ScheduleNowDTO> {
           youtube_id: null,
           youtube_url: null,
         },
+      },
+    };
+  }
+}
+
+/**
+ * Fetches concise real-time live radio & YouTube broadcast state (/live) from Capital FM Public API.
+ * Cached in Redis for 30 seconds.
+ */
+export async function getLiveState(): Promise<LiveStateDTO> {
+  const cacheKey = 'live:state';
+
+  if (redis.status === 'ready') {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (_) {}
+  }
+
+  const url = `${config.services.capitalFmApiBaseUrl}/live`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Live state API returned status ${response.status}`);
+    }
+
+    const payload = (await response.json()) as LiveStateDTO;
+
+    if (redis.status === 'ready') {
+      redis.setex(cacheKey, 30, JSON.stringify(payload)).catch(() => {});
+    }
+
+    return payload;
+  } catch (error) {
+    logger.warn({ error, url }, 'Failed to fetch /live from Capital FM API. Returning fallback live state.');
+    const nowIso = formatEatIsoString();
+
+    return {
+      meta: { timezone: 'Africa/Nairobi', generated_at: nowIso, api_version: '2.2.0' },
+      data: {
+        radio: {
+          is_live: true,
+          stream_url: config.services.liveStreamPrimaryUrl,
+          show: 'Capital FM Live',
+          host: 'Capital FM Presenters',
+          ends_at: nowIso,
+        },
+        youtube: {
+          is_live: false,
+          video_id: null,
+          channel_id: null,
+          title: null,
+          watch_url: null,
+          embed_url: null,
+        },
+        checked_at: nowIso,
       },
     };
   }

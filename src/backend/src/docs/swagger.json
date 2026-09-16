@@ -165,6 +165,28 @@
         }
       }
     },
+    "/api/v1/live": {
+      "get": {
+        "summary": "Real-time Concise Live Radio & YouTube Broadcast State",
+        "description": "Returns current live show name, hosts, radio stream URL, ends_at timestamp, and active YouTube Live stream metadata.",
+        "responses": {
+          "200": {
+            "description": "Real-time live broadcast state object containing radio show and YouTube live metadata."
+          }
+        }
+      }
+    },
+    "/api/v1/schedules/now": {
+      "get": {
+        "summary": "Real-time Live Show Progress & Schedule State",
+        "description": "Returns detailed live show state in East Africa Time (EAT), elapsed/remaining time, up_next show, and progress ratio.",
+        "responses": {
+          "200": {
+            "description": "Real-time live show and up_next show schedule object."
+          }
+        }
+      }
+    },
     "/api/v1/schedules": {
       "get": {
         "summary": "Weekly Radio Show Schedules",
@@ -198,11 +220,11 @@
     },
     "/api/v1/stream/nowplaying": {
       "get": {
-        "summary": "Live Now Playing Track & Album Art",
-        "description": "Parses live ICY track metadata and returns 600x600 iTunes album artwork.",
+        "summary": "Live Now Playing Track, Album Art & Live Broadcast State",
+        "description": "Parses live ICY track metadata, returns 600x600 iTunes album artwork, active show details, and real-time live broadcast state (radio show and YouTube Live metadata).",
         "responses": {
           "200": {
-            "description": "Currently playing track metadata payload."
+            "description": "Currently playing track metadata payload including embedded live broadcast state."
           }
         }
       }

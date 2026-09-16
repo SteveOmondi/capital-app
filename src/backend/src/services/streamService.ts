@@ -2,7 +2,7 @@ import { config } from '../config';
 import { parseIcyMetadataString, extractIcyStreamTitle } from '../utils/icyScraper';
 import { fetchAlbumArtwork, EnrichedTrackDetails } from './enrichmentService';
 import { getStreamGuysAccessToken } from './streamGuysService';
-import { getCurrentLiveShow, getTodayName, formatEatIsoString, ShowSlot } from './scheduleService';
+import { getCurrentLiveShow, getLiveState, LiveStateDTO, getTodayName, formatEatIsoString, ShowSlot } from './scheduleService';
 import { redis } from '../config/redis';
 import { logger } from '../middlewares/logger';
 
@@ -29,6 +29,7 @@ export interface NowPlayingDTO {
   isLive: boolean;
   track: EnrichedTrackDetails;
   show?: ShowSlot | null;
+  live?: LiveStateDTO['data'] | null;
   streamUrl: string;
   fallbackStreamUrl?: string;
   proxyStreamUrl?: string;
@@ -272,24 +273,26 @@ export async function getNowPlayingTrack(baseUrl?: string): Promise<NowPlayingDT
 
   const parsed = parseIcyMetadataString(rawMetadataString);
   const enriched = await fetchAlbumArtwork(parsed.artist, parsed.title);
-  const [streamConfig, currentShow] = await Promise.all([
+  const [streamConfig, currentShow, liveState] = await Promise.all([
     getStreamConfig(baseUrl),
     getCurrentLiveShow(),
+    getLiveState(),
   ]);
 
   const payload: NowPlayingDTO = {
-    isLive: true,
+    isLive: liveState?.data?.radio?.is_live ?? true,
     track: enriched,
     show: currentShow || {
       id: 'capital-fm-live',
-      title: 'Capital FM Live Radio',
-      presenters: ['Capital FM Crew'],
+      title: liveState?.data?.radio?.show || 'Capital FM Live Radio',
+      presenters: liveState?.data?.radio?.host ? [liveState.data.radio.host] : ['Capital FM Crew'],
       startTime: '00:00',
       endTime: '23:59',
       dayOfWeek: getTodayName(),
       description: 'Capital FM Kenya - 98.4 FM Live Radio Broadcasting',
       isLiveNow: true,
     },
+    live: liveState?.data || null,
     streamUrl: streamConfig.primaryHlsUrl,
     fallbackStreamUrl: streamConfig.fallbackAacUrl,
     proxyStreamUrl: streamConfig.proxyStreamUrl,

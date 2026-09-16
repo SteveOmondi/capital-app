@@ -38,5 +38,6 @@ describe('Stream API Integration Tests', () => {
     expect(response.body.data).toHaveProperty('track');
     expect(response.body.data.track).toHaveProperty('artist');
     expect(response.body.data.track).toHaveProperty('title');
+    expect(response.body.data).toHaveProperty('live');
   });
 });
