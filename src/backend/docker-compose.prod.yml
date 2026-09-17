@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     image: ${DOCKER_IMAGE:-jimane254/capital-app}:${DOCKER_IMAGE_TAG:-latest}

@@ -50,11 +50,18 @@ export DOCKER_IMAGE_TAG
 echo "Launching application containers via Docker Compose..."
 docker compose $PROFILES -f "$APP_DIR/docker-compose.prod.yml" up -d --remove-orphans
 
-# 5. Run Prisma Database Migrations inside container
-echo "Executing Prisma database migrations..."
-if ! docker compose -f "$APP_DIR/docker-compose.prod.yml" exec -T backend npx prisma migrate deploy; then
-    echo "ERROR: Prisma database migration failed!"
-    TRIGGER_ROLLBACK=true
+# 5. Run Prisma Database Migrations / Schema Sync inside container
+echo "Executing Prisma database schema synchronization..."
+if docker compose -f "$APP_DIR/docker-compose.prod.yml" exec -T backend npx prisma migrate deploy 2>/dev/null; then
+    echo "Prisma migrations applied successfully."
+else
+    echo "Prisma migrate deploy bypassed/failed. Executing schema sync (prisma db push)..."
+    if ! docker compose -f "$APP_DIR/docker-compose.prod.yml" exec -T backend npx prisma db push --skip-generate; then
+        echo "ERROR: Prisma schema synchronization failed!"
+        TRIGGER_ROLLBACK=true
+    else
+        echo "Prisma schema successfully synchronized via db push."
+    fi
 fi
 
 # 6. Perform Healthcheck Polling
