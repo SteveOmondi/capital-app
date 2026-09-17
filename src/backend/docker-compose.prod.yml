@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ${DOCKER_IMAGE:-jimane254/capital-app}:${DOCKER_IMAGE_TAG:-latest}
+    container_name: capital_fm_backend
+    restart: always
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/v1/stream/config || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  postgres:
+    profiles:
+      - container-db
+    image: postgres:16-alpine
+    container_name: capital_fm_postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-capitalfm_db}
+    volumes:
+      - /opt/apps/capital-app/data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-capitalfm_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    profiles:
+      - container-redis
+    image: redis:7-alpine
+    container_name: capital_fm_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    env_file:
+      - .env
+    command: >
+      sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-server --requirepass \"$$REDIS_PASSWORD\"; else redis-server; fi"
+    volumes:
+      - /opt/apps/capital-app/data/redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

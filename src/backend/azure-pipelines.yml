@@ -1,47 +1,45 @@
-# Azure DevOps CI/CD Pipeline for Capital FM Backend Gateway
-# Target Compute: Azure Container Apps (ACA) - Scale-to-Zero ($0.00 - $5.00/month)
+# Azure DevOps CI/CD Pipeline for Self-Hosted Docker Production Deployment
+# Target Compute: Linux Server via SSH (azdevops@$(PROD_SSH_HOST) under /opt/apps/capital-app)
 # Container Registry: Docker Hub
-# Region: South Africa North (southafricanorth)
 
-trigger:
-  branches:
-    include:
-      - main
-      - master
+trigger: none
+pr: none
 
 pool:
   vmImage: 'ubuntu-latest'
 
 # =========================================================================
 # Azure DevOps Variable Group & Pipeline Variables
-# Configure Variable Group 'capital-app-vg' under Pipelines -> Library in Azure DevOps
+# Configure Variable Group 'capital-app-vg' under Pipelines -> Library
 # =========================================================================
 variables:
   - group: capital-app-vg # Azure DevOps Library Variable Group name
 
-  # Service Connection Names
+  # Service Connections & Secure Files
   - name: dockerHubServiceConnection
     value: 'DockerHub-ServiceConnection'
-  - name: azureServiceConnection
-    value: 'Azure-StayHere-Conn'
+  - name: SSH_KEY_SECURE_FILE_NAME
+    value: 'id_azdevops'
+  - name: FIREBASE_P12_SECURE_FILE_NAME
+    value: 'capitalfmapp-12169-8f7afd5cc58a.p12'
 
-  # Docker Hub Credentials & Image Config
+  # Docker Image Configuration
   - name: dockerHubUsername
     value: 'jimane254'
   - name: imageRepository
     value: 'capital-app'
 
-  # Azure Resource & Region Config
-  - name: resourceGroup
-    value: 'rg-capital-prod'
-  - name: containerAppName
-    value: 'ca-capital-backend-api'
-  - name: azureLocation
-    value: 'southafricanorth'
+  # Target SSH Connection Configuration (Host IP/Domain set in Variable Group)
+  - name: PROD_SSH_USER
+    value: 'azdevops'
+  - name: PROD_SSH_PORT
+    value: '22'
 
-  # Firebase PKCS12 Secure File Name
-  - name: FIREBASE_P12_SECURE_FILE_NAME
-    value: 'capitalfmapp-12169-8f7afd5cc58a.p12'
+  # Containerized Infrastructure Flags (Set to false if connecting to external DB/Redis)
+  - name: DEPLOY_CONTAINERIZED_DB
+    value: 'true'
+  - name: DEPLOY_CONTAINERIZED_REDIS
+    value: 'true'
 
 stages:
   # =========================================================================
@@ -84,7 +82,7 @@ stages:
           - script: |
               P12_B64=$(base64 -w 0 $(firebaseCert.secureFilePath))
               echo "##vso[task.setvariable variable=FIREBASE_P12_BASE64;isSecret=true]$P12_B64"
-            displayName: 'Encode PKCS12 Certificate for Production Deployment'
+            displayName: 'Encode PKCS12 Certificate'
 
           - script: |
               cd src/backend
@@ -142,78 +140,82 @@ stages:
                 latest
 
   # =========================================================================
-  # STAGE 3: Deploy to Azure Container Apps (CD)
+  # STAGE 3: SSH Production Deployment & Healthcheck Rollback (CD)
   # =========================================================================
-  - stage: DeployToAzureContainerApps
-    displayName: '3. Deploy to Azure Container Apps'
+  - stage: DeployToProductionSSH
+    displayName: '3. SSH Production Deploy & Rollback'
     dependsOn: DockerBuildAndPush
     condition: succeeded()
     jobs:
-      - job: DeployJob
-        displayName: 'Update / Provision Azure Container App'
+      - job: SSHDeployJob
+        displayName: 'Deploy Services to /opt/apps/capital-app via SSH'
         steps:
-          - task: AzureCLI@2
-            displayName: 'Deploy Container Image to Azure Container Apps'
+          - task: DownloadSecureFile@1
+            name: sshKey
+            displayName: 'Download SSH Private Key Secure File'
             inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                echo "Installing containerapp extension..."
-                az extension add --name containerapp --upgrade
+              secureFile: '$(SSH_KEY_SECURE_FILE_NAME)'
 
-                echo "Ensuring Resource Group $(resourceGroup) exists in $(azureLocation)..."
-                az group create --name $(resourceGroup) --location "$(azureLocation)"
+          - task: DownloadSecureFile@1
+            name: firebaseCert
+            displayName: 'Download Firebase PKCS12 Certificate'
+            inputs:
+              secureFile: '$(FIREBASE_P12_SECURE_FILE_NAME)'
 
-                echo "Checking if Azure Container App $(containerAppName) exists in $(resourceGroup)..."
-                if az containerapp show --name $(containerAppName) --resource-group $(resourceGroup) &>/dev/null; then
-                  echo "Updating existing Azure Container App $(containerAppName)..."
-                  az containerapp update \
-                    --name $(containerAppName) \
-                    --resource-group $(resourceGroup) \
-                    --image $(dockerHubUsername)/$(imageRepository):$(Build.BuildId)
-                else
-                  echo "Container app $(containerAppName) does not exist. Creating new Container App in $(azureLocation)..."
-                  ENV_NAME="env-$(resourceGroup)"
-                  if ! az containerapp env show --name $ENV_NAME --resource-group $(resourceGroup) &>/dev/null; then
-                    echo "Creating Container Apps Managed Environment $ENV_NAME in $(azureLocation)..."
-                    az containerapp env create \
-                      --name $ENV_NAME \
-                      --resource-group $(resourceGroup) \
-                      --location "$(azureLocation)"
-                  fi
+          - script: |
+              P12_B64=$(base64 -w 0 $(firebaseCert.secureFilePath))
+              echo "##vso[task.setvariable variable=FIREBASE_P12_BASE64;isSecret=true]$P12_B64"
+            displayName: 'Encode PKCS12 Certificate for Remote Host'
 
-                  az containerapp create \
-                    --name $(containerAppName) \
-                    --resource-group $(resourceGroup) \
-                    --environment $ENV_NAME \
-                    --image $(dockerHubUsername)/$(imageRepository):$(Build.BuildId) \
-                    --target-port 3000 \
-                    --ingress external \
-                    --min-replicas 0 \
-                    --max-replicas 5 \
-                    --env-vars \
-                      NODE_ENV=production \
-                      PORT=3000 \
-                      LOG_LEVEL=info \
-                      DATABASE_URL="$(DATABASE_URL)" \
-                      REDIS_HOST="$(REDIS_HOST)" \
-                      REDIS_PORT="$(REDIS_PORT)" \
-                      REDIS_PASSWORD="$(REDIS_PASSWORD)" \
-                      WP_WEBHOOK_SECRET="$(WP_WEBHOOK_SECRET)" \
-                      WP_CMS_BASE_URL="$(WP_CMS_BASE_URL)" \
-                      PODCAST_RSS_URL="$(PODCAST_RSS_URL)" \
-                      LIVE_STREAM_PRIMARY_URL="$(LIVE_STREAM_PRIMARY_URL)" \
-                      LIVE_STREAM_FALLBACK_URL="$(LIVE_STREAM_FALLBACK_URL)" \
-                      ICY_STREAM_URL="$(ICY_STREAM_URL)" \
-                      FIREBASE_PROJECT_ID="$(FIREBASE_PROJECT_ID)" \
-                      FIREBASE_CLIENT_EMAIL="$(FIREBASE_CLIENT_EMAIL)" \
-                      FIREBASE_PRIVATE_KEY="$(FIREBASE_PRIVATE_KEY)" \
-                      FIREBASE_P12_PASSPHRASE="$(FIREBASE_P12_PASSPHRASE)" \
-                      FIREBASE_P12_BASE64="$(FIREBASE_P12_BASE64)" \
-                      STREAMGUYS_HOST="$(STREAMGUYS_HOST)" \
-                      STREAMGUYS_CLIENT_ID="$(STREAMGUYS_CLIENT_ID)" \
-                      STREAMGUYS_CLIENT_SECRET="$(STREAMGUYS_CLIENT_SECRET)" \
-                      STREAMGUYS_USERNAME="$(STREAMGUYS_USERNAME)" \
-                      STREAMGUYS_PASSWORD="$(STREAMGUYS_PASSWORD)"
-                fi
+          - script: |
+              set -e
+              chmod 600 $(sshKey.secureFilePath)
+              SSH_CMD="ssh -p $(PROD_SSH_PORT) -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
+              SCP_CMD="scp -P $(PROD_SSH_PORT) -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
+
+              echo "Ensuring target directory structure exists on $(PROD_SSH_HOST)..."
+              $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "mkdir -p /opt/apps/capital-app/scripts"
+
+              echo "Copying deployment configuration and scripts to $(PROD_SSH_HOST)..."
+              $SCP_CMD src/backend/docker-compose.prod.yml $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/docker-compose.prod.yml
+              $SCP_CMD src/backend/scripts/deploy-ssh.sh $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/scripts/deploy-ssh.sh
+              $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "chmod +x /opt/apps/capital-app/scripts/deploy-ssh.sh"
+
+              echo "Generating runtime .env file on remote production host..."
+              $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "cat << 'EOF' > /opt/apps/capital-app/.env
+NODE_ENV=production
+PORT=3000
+LOG_LEVEL=info
+POSTGRES_USER=$(POSTGRES_USER)
+POSTGRES_PASSWORD=$(POSTGRES_PASSWORD)
+POSTGRES_DB=$(POSTGRES_DB)
+DATABASE_URL=$(DATABASE_URL)
+REDIS_HOST=$(REDIS_HOST)
+REDIS_PORT=$(REDIS_PORT)
+REDIS_PASSWORD=$(REDIS_PASSWORD)
+WP_WEBHOOK_SECRET=$(WP_WEBHOOK_SECRET)
+WP_CMS_BASE_URL=$(WP_CMS_BASE_URL)
+PODCAST_RSS_URL=$(PODCAST_RSS_URL)
+LIVE_STREAM_PRIMARY_URL=$(LIVE_STREAM_PRIMARY_URL)
+LIVE_STREAM_FALLBACK_URL=$(LIVE_STREAM_FALLBACK_URL)
+ICY_STREAM_URL=$(ICY_STREAM_URL)
+FIREBASE_PROJECT_ID=$(FIREBASE_PROJECT_ID)
+FIREBASE_CLIENT_EMAIL=$(FIREBASE_CLIENT_EMAIL)
+FIREBASE_PRIVATE_KEY=$(FIREBASE_PRIVATE_KEY)
+FIREBASE_P12_PASSPHRASE=$(FIREBASE_P12_PASSPHRASE)
+FIREBASE_P12_BASE64=$(FIREBASE_P12_BASE64)
+STREAMGUYS_HOST=$(STREAMGUYS_HOST)
+STREAMGUYS_CLIENT_ID=$(STREAMGUYS_CLIENT_ID)
+STREAMGUYS_CLIENT_SECRET=$(STREAMGUYS_CLIENT_SECRET)
+STREAMGUYS_USERNAME=$(STREAMGUYS_USERNAME)
+STREAMGUYS_PASSWORD=$(STREAMGUYS_PASSWORD)
+EOF"
+
+              echo "Triggering remote deployment and healthcheck verification..."
+              $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) \
+                "DOCKER_IMAGE=$(dockerHubUsername)/$(imageRepository) \
+                 DOCKER_IMAGE_TAG=$(Build.BuildId) \
+                 DEPLOY_CONTAINERIZED_DB=$(DEPLOY_CONTAINERIZED_DB) \
+                 DEPLOY_CONTAINERIZED_REDIS=$(DEPLOY_CONTAINERIZED_REDIS) \
+                 /opt/apps/capital-app/scripts/deploy-ssh.sh"
+            displayName: 'Execute SSH Deployment, Healthchecks & Rollback'
