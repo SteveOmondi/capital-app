@@ -3,8 +3,8 @@
 # Container Registry: Docker Hub
 # Region: South Africa North (southafricanorth)
 
-trigger: none
-pr: none
+trigger: []
+pr: []
 
 pool:
   vmImage: 'ubuntu-latest'
