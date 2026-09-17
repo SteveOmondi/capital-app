@@ -9,7 +9,7 @@
     "start": "node dist/server.js",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "test": "jest --passWithNoTests",
+    "test": "jest --passWithNoTests --forceExit --detectOpenHandles",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
