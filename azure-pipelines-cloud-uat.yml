@@ -1,0 +1,216 @@
+# Azure DevOps CI/CD Pipeline for Cloud UAT (Azure Container Apps)
+# Target Compute: Azure Container Apps (ACA) - UAT Environment
+# Container Registry: Docker Hub
+# Region: South Africa North (southafricanorth)
+
+trigger: none
+pr: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+# =========================================================================
+# Azure DevOps Variable Group & Pipeline Variables
+# Configure Variable Group 'capital-app-vg' under Pipelines -> Library
+# =========================================================================
+variables:
+  - group: capital-app-vg # Azure DevOps Library Variable Group name
+
+  # Service Connection Names
+  - name: dockerHubServiceConnection
+    value: 'DockerHub-ServiceConnection'
+  - name: azureServiceConnection
+    value: 'Azure-StayHere-Conn'
+
+  # Docker Hub Credentials & Image Config
+  - name: dockerHubUsername
+    value: 'jimane254'
+  - name: imageRepository
+    value: 'capital-app'
+
+  # Azure Resource & Region Config
+  - name: resourceGroup
+    value: 'rg-capital-uat'
+  - name: containerAppName
+    value: 'ca-capital-backend-uat'
+  - name: azureLocation
+    value: 'southafricanorth'
+
+  # Firebase PKCS12 Secure File Name
+  - name: FIREBASE_P12_SECURE_FILE_NAME
+    value: 'capitalfmapp-12169-8f7afd5cc58a.p12'
+
+stages:
+  # =========================================================================
+  # STAGE 1: Continuous Integration (Test & Build)
+  # =========================================================================
+  - stage: TestAndBuild
+    displayName: '1. Test & Build (CI)'
+    jobs:
+      - job: TestAndBuildJob
+        displayName: 'Run Tests & Compile TypeScript'
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '18.x'
+            displayName: 'Install Node.js 18.x'
+
+          - script: |
+              cd src/backend
+              npm ci
+            displayName: 'Install Dependencies'
+
+          - script: |
+              cd src/backend
+              npx prisma generate
+            env:
+              DATABASE_URL: $(DATABASE_URL)
+            displayName: 'Generate Prisma Client'
+
+          - script: |
+              cd src/backend
+              npx tsc --noEmit
+            displayName: 'Check TypeScript Compilation'
+
+          - task: DownloadSecureFile@1
+            name: firebaseCert
+            displayName: 'Download Firebase PKCS12 Certificate'
+            inputs:
+              secureFile: '$(FIREBASE_P12_SECURE_FILE_NAME)'
+
+          - script: |
+              P12_B64=$(base64 -w 0 $(firebaseCert.secureFilePath))
+              echo "##vso[task.setvariable variable=FIREBASE_P12_BASE64;isSecret=true]$P12_B64"
+            displayName: 'Encode PKCS12 Certificate for Deployment'
+
+          - script: |
+              cd src/backend
+              npm test
+            env:
+              DATABASE_URL: $(DATABASE_URL)
+              REDIS_HOST: $(REDIS_HOST)
+              REDIS_PORT: $(REDIS_PORT)
+              REDIS_PASSWORD: $(REDIS_PASSWORD)
+              WP_WEBHOOK_SECRET: $(WP_WEBHOOK_SECRET)
+              WP_CMS_BASE_URL: $(WP_CMS_BASE_URL)
+              PODCAST_RSS_URL: $(PODCAST_RSS_URL)
+              LIVE_STREAM_PRIMARY_URL: $(LIVE_STREAM_PRIMARY_URL)
+              LIVE_STREAM_FALLBACK_URL: $(LIVE_STREAM_FALLBACK_URL)
+              ICY_STREAM_URL: $(ICY_STREAM_URL)
+              FIREBASE_PROJECT_ID: $(FIREBASE_PROJECT_ID)
+              FIREBASE_CLIENT_EMAIL: $(FIREBASE_CLIENT_EMAIL)
+              FIREBASE_PRIVATE_KEY: $(FIREBASE_PRIVATE_KEY)
+              FIREBASE_P12_PATH: $(firebaseCert.secureFilePath)
+              FIREBASE_P12_PASSPHRASE: $(FIREBASE_P12_PASSPHRASE)
+              FIREBASE_P12_BASE64: $(FIREBASE_P12_BASE64)
+              STREAMGUYS_HOST: $(STREAMGUYS_HOST)
+              STREAMGUYS_CLIENT_ID: $(STREAMGUYS_CLIENT_ID)
+              STREAMGUYS_CLIENT_SECRET: $(STREAMGUYS_CLIENT_SECRET)
+              STREAMGUYS_USERNAME: $(STREAMGUYS_USERNAME)
+              STREAMGUYS_PASSWORD: $(STREAMGUYS_PASSWORD)
+            displayName: 'Execute Jest Test Suite'
+
+  # =========================================================================
+  # STAGE 2: Build & Push Docker Image to Docker Hub
+  # =========================================================================
+  - stage: DockerBuildAndPush
+    displayName: '2. Docker Build & Push (Docker Hub)'
+    dependsOn: TestAndBuild
+    condition: succeeded()
+    jobs:
+      - job: DockerJob
+        displayName: 'Build & Push Docker Image'
+        steps:
+          - task: Docker@2
+            displayName: 'Login to Docker Hub'
+            inputs:
+              command: 'login'
+              containerRegistry: '$(dockerHubServiceConnection)'
+
+          - task: Docker@2
+            displayName: 'Build and Push Docker Image'
+            inputs:
+              command: 'buildAndPush'
+              repository: '$(dockerHubUsername)/$(imageRepository)'
+              dockerfile: '$(Build.SourcesDirectory)/src/backend/Dockerfile'
+              buildContext: '$(Build.SourcesDirectory)/src/backend'
+              tags: |
+                $(Build.BuildId)
+                uat-latest
+
+  # =========================================================================
+  # STAGE 3: Deploy to Azure Container Apps (UAT)
+  # =========================================================================
+  - stage: DeployToAzureContainerAppsUAT
+    displayName: '3. Deploy to Azure Container Apps (UAT)'
+    dependsOn: DockerBuildAndPush
+    condition: succeeded()
+    jobs:
+      - job: DeployJob
+        displayName: 'Update / Provision Azure Container App (UAT)'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Deploy Container Image to Azure Container Apps'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Installing containerapp extension..."
+                az extension add --name containerapp --upgrade
+
+                echo "Ensuring Resource Group $(resourceGroup) exists in $(azureLocation)..."
+                az group create --name $(resourceGroup) --location "$(azureLocation)"
+
+                echo "Checking if Azure Container App $(containerAppName) exists in $(resourceGroup)..."
+                if az containerapp show --name $(containerAppName) --resource-group $(resourceGroup) &>/dev/null; then
+                  echo "Updating existing Azure Container App $(containerAppName)..."
+                  az containerapp update \
+                    --name $(containerAppName) \
+                    --resource-group $(resourceGroup) \
+                    --image $(dockerHubUsername)/$(imageRepository):$(Build.BuildId)
+                else
+                  echo "Container app $(containerAppName) does not exist. Creating new Container App in $(azureLocation)..."
+                  ENV_NAME="env-$(resourceGroup)"
+                  if ! az containerapp env show --name $ENV_NAME --resource-group $(resourceGroup) &>/dev/null; then
+                    echo "Creating Container Apps Managed Environment $ENV_NAME in $(azureLocation)..."
+                    az containerapp env create \
+                      --name $ENV_NAME \
+                      --resource-group $(resourceGroup) \
+                      --location "$(azureLocation)"
+                  fi
+
+                  az containerapp create \
+                    --name $(containerAppName) \
+                    --resource-group $(resourceGroup) \
+                    --environment $ENV_NAME \
+                    --image $(dockerHubUsername)/$(imageRepository):$(Build.BuildId) \
+                    --target-port 3000 \
+                    --ingress external \
+                    --min-replicas 0 \
+                    --max-replicas 5 \
+                    --env-vars \
+                      NODE_ENV=production \
+                      PORT=3000 \
+                      LOG_LEVEL=info \
+                      DATABASE_URL="$(DATABASE_URL)" \
+                      REDIS_HOST="$(REDIS_HOST)" \
+                      REDIS_PORT="$(REDIS_PORT)" \
+                      REDIS_PASSWORD="$(REDIS_PASSWORD)" \
+                      WP_WEBHOOK_SECRET="$(WP_WEBHOOK_SECRET)" \
+                      WP_CMS_BASE_URL="$(WP_CMS_BASE_URL)" \
+                      PODCAST_RSS_URL="$(PODCAST_RSS_URL)" \
+                      LIVE_STREAM_PRIMARY_URL="$(LIVE_STREAM_PRIMARY_URL)" \
+                      LIVE_STREAM_FALLBACK_URL="$(LIVE_STREAM_FALLBACK_URL)" \
+                      ICY_STREAM_URL="$(ICY_STREAM_URL)" \
+                      FIREBASE_PROJECT_ID="$(FIREBASE_PROJECT_ID)" \
+                      FIREBASE_CLIENT_EMAIL="$(FIREBASE_CLIENT_EMAIL)" \
+                      FIREBASE_PRIVATE_KEY="$(FIREBASE_PRIVATE_KEY)" \
+                      FIREBASE_P12_PASSPHRASE="$(FIREBASE_P12_PASSPHRASE)" \
+                      FIREBASE_P12_BASE64="$(FIREBASE_P12_BASE64)" \
+                      STREAMGUYS_HOST="$(STREAMGUYS_HOST)" \
+                      STREAMGUYS_CLIENT_ID="$(STREAMGUYS_CLIENT_ID)" \
+                      STREAMGUYS_CLIENT_SECRET="$(STREAMGUYS_CLIENT_SECRET)" \
+                      STREAMGUYS_USERNAME="$(STREAMGUYS_USERNAME)" \
+                      STREAMGUYS_PASSWORD="$(STREAMGUYS_PASSWORD)"
+                fi
