@@ -16,11 +16,18 @@ export interface StreamGuysConfig {
   password?: string;
 }
 
+let authFailureCooldownUntil = 0;
+
 /**
  * Obtains an OAuth Bearer token from StreamGuys Recast API using Password grant (`grant_type: "password"`).
  * Caches the token in Redis to minimize authentication roundtrips.
  */
 export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig): Promise<string | null> {
+  // If authentication failed recently, enforce 60s cooldown to prevent API spamming
+  if (Date.now() < authFailureCooldownUntil) {
+    return null;
+  }
+
   const host = customConfig?.host || config.streamguys.host;
   const clientId = customConfig?.clientId || config.streamguys.clientId;
   const clientSecret = customConfig?.clientSecret || config.streamguys.clientSecret;
@@ -67,7 +74,8 @@ export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig):
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.warn({ status: response.status, errorText }, 'StreamGuys OAuth token request failed');
+      logger.warn({ status: response.status, errorText }, 'StreamGuys OAuth token request failed. Enforcing 60s retry cooldown.');
+      authFailureCooldownUntil = Date.now() + 60000;
       return null;
     }
 
@@ -80,6 +88,7 @@ export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig):
       redis.setex(cacheKey, Math.max(60, expiresIn - 60), accessToken).catch(() => {});
     }
 
+    authFailureCooldownUntil = 0;
     logger.info('Successfully authenticated with StreamGuys Recast API via Password Grant');
     return accessToken;
   } catch (error) {
