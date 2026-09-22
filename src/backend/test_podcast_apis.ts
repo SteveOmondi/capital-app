@@ -13,26 +13,31 @@ async function testApis() {
     console.log('WP Error:', e.message);
   }
 
-  console.log('\n=== 2. Checking Atunwa SGrecast REST API: /api/v1/sgrecast/podcasts/feeds ===');
+  console.log('\n=== 2. Checking WP Public API: /wp-json/capitalfm/v1/podcasts/groups ===');
   try {
-    const token = await getStreamGuysAccessToken();
-    if (token) {
-      const res = await fetch('https://atunwadigital-recast.streamguys1.com/api/v1/sgrecast/podcasts/feeds', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-      });
-      console.log('Atunwa API Status:', res.status);
-      if (res.ok) {
-        const data: any = await res.json();
-        const items = data.data || data;
-        console.log('Atunwa API count:', items.length);
-        console.log('Sample item:', JSON.stringify(items[0], null, 2));
+    const res = await fetch('https://capitalfm.africa/wp-json/capitalfm/v1/podcasts/groups');
+    console.log('Groups Status:', res.status);
+    if (res.ok) {
+      const data: any = await res.json();
+      console.log('Groups Response:', JSON.stringify(data, null, 2));
+    }
+  } catch (e: any) {
+    console.log('Groups Error:', e.message);
+  }
+
+  console.log('\n=== 3. Checking WP Public API: /wp-json/capitalfm/v1/podcasts/episodes ===');
+  try {
+    const res = await fetch('https://capitalfm.africa/wp-json/capitalfm/v1/podcasts/episodes');
+    console.log('Episodes Status:', res.status);
+    if (res.ok) {
+      const data: any = await res.json();
+      console.log('Episodes count:', data.data?.length || data.length);
+      if (data.data && data.data.length > 0) {
+        console.log('Sample Episode:', JSON.stringify(data.data[0], null, 2));
       }
     }
   } catch (e: any) {
-    console.log('Atunwa API Error:', e.message);
+    console.log('Episodes Error:', e.message);
   }
 }
 
