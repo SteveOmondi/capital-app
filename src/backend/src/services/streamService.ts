@@ -172,7 +172,7 @@ export async function proxyLiveAudioStream(req: any, res: any): Promise<void> {
 
 function formatProxyUrl(baseUrl?: string, path: string = '/api/v1/stream/listen'): string {
   if (!baseUrl || baseUrl.trim().length === 0) {
-    const defaultHost = process.env.PUBLIC_BASE_URL || 'https://api-cpapp.aialabs.co.ke';
+    const defaultHost = process.env.PUBLIC_BASE_URL || 'https://api.datalait.co.ke';
     return `${defaultHost.replace(/\/$/, '')}${path}`;
   }
 

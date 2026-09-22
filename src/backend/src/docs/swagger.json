@@ -11,6 +11,18 @@
   },
   "servers": [
     {
+      "url": "https://api.datalait.co.ke",
+      "description": "Primary Production Gateway (api.datalait.co.ke)"
+    },
+    {
+      "url": "https://api-cpapp.aialabs.co.ke",
+      "description": "Secondary Production Gateway (api-cpapp.aialabs.co.ke)"
+    },
+    {
+      "url": "https://ca-capital-backend-api.salmonwave-7494888b.eastus.azurecontainerapps.io",
+      "description": "Azure Container Apps Ingress"
+    },
+    {
       "url": "http://localhost:3000",
       "description": "Local Development Server"
     }

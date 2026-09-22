@@ -14,10 +14,14 @@ export function createApp(): Express {
   app.set('trust proxy', true);
 
   // Security Headers & CORS
+  const allowedOrigins = config.corsOrigin && config.corsOrigin.includes(',')
+    ? config.corsOrigin.split(',').map((o) => o.trim())
+    : config.corsOrigin || '*';
+
   app.use(helmet());
   app.use(
     cors({
-      origin: config.corsOrigin,
+      origin: allowedOrigins,
       credentials: true,
     })
   );
