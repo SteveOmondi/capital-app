@@ -220,3 +220,31 @@ stages:
                  DEPLOY_CONTAINERIZED_REDIS=$(DEPLOY_CONTAINERIZED_REDIS) \
                  /opt/apps/capital-app/scripts/deploy-ssh.sh"
             displayName: 'Execute SSH Deployment, Healthchecks & Rollback'
+
+  # =========================================================================
+  # STAGE 4: Automated Post-Deployment Load Testing
+  # =========================================================================
+  - stage: AutomatedLoadTest
+    displayName: '4. Post-Deploy Streaming Load Test'
+    dependsOn: DeployToProductionSSH
+    condition: succeeded()
+    jobs:
+      - job: LoadTestVerificationJob
+        displayName: 'Run Streaming & API Concurrency Load Test'
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '18.x'
+            displayName: 'Install Node.js 18.x'
+
+          - script: |
+              cd src/backend
+              npm ci
+            displayName: 'Install Dependencies'
+
+          - script: |
+              cd src/backend
+              npx ts-node scripts/loadtest.ts --target=https://api.datalait.co.ke --mode=mixed --vus=200 --duration=30 --ramp=5
+            env:
+              DISABLE_RATE_LIMIT: 'true'
+            displayName: 'Execute Automated Streaming Load Test'

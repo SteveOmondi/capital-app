@@ -4,6 +4,7 @@ import { redis } from '../config/redis';
 import { logger } from './logger';
 
 export const apiRateLimiter = rateLimit({
+  skip: () => process.env.DISABLE_RATE_LIMIT === 'true' || process.env.NODE_ENV === 'test',
   windowMs: 60 * 1000, // 1 minute window
   max: 60, // Limit each IP to 60 requests per windowMs
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers

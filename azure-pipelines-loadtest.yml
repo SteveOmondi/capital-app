@@ -1,0 +1,58 @@
+# Azure DevOps Dedicated Load Testing Pipeline
+# Runs high-concurrency audio streaming and API gateway load tests against Staging/Production
+
+trigger: none # Manual or scheduled execution
+pr: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: capital-app-vg # Azure DevOps Library Variable Group
+  - name: TARGET_URL
+    value: 'https://api.datalait.co.ke'
+  - name: VUS
+    value: '250' # Target Virtual Streamers
+  - name: DURATION
+    value: '60' # Test duration in seconds
+  - name: MODE
+    value: 'mixed' # 'stream', 'metadata', or 'mixed'
+
+stages:
+  - stage: ExecuteLoadTest
+    displayName: '🔥 Streaming Gateway Load Test'
+    jobs:
+      - job: NodeJsLoadTest
+        displayName: 'Run TypeScript Streaming Load Tester'
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '18.x'
+            displayName: 'Install Node.js 18.x'
+
+          - script: |
+              cd src/backend
+              npm ci
+            displayName: 'Install Dependencies'
+
+          - script: |
+              cd src/backend
+              npx ts-node scripts/loadtest.ts --target=$(TARGET_URL) --mode=$(MODE) --vus=$(VUS) --duration=$(DURATION) --ramp=10
+            env:
+              DISABLE_RATE_LIMIT: 'true'
+            displayName: 'Execute TypeScript Streaming Load Test'
+
+      - job: K6LoadTest
+        displayName: 'Run Grafana k6 Load Test'
+        steps:
+          - script: |
+              sudo gpg -k
+              sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C513093E4396801C300C86F9A16EB26A060E5948
+              echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+              sudo apt-get update
+              sudo apt-get install -y k6
+            displayName: 'Install k6 CLI on Ubuntu Runner'
+
+          - script: |
+              k6 run src/backend/scripts/k6-loadtest.js -e TARGET_URL=$(TARGET_URL)
+            displayName: 'Execute Grafana k6 Load Test'

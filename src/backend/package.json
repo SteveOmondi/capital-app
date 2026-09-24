@@ -11,7 +11,11 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "test": "jest --passWithNoTests --forceExit --detectOpenHandles",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "loadtest": "DISABLE_RATE_LIMIT=true ts-node scripts/loadtest.ts",
+    "loadtest:stream": "DISABLE_RATE_LIMIT=true ts-node scripts/loadtest.ts --mode=stream --vus=200 --duration=30",
+    "loadtest:mixed": "DISABLE_RATE_LIMIT=true ts-node scripts/loadtest.ts --mode=mixed --vus=100 --duration=30",
+    "loadtest:k6": "k6 run scripts/k6-loadtest.js"
   },
   "keywords": [
     "nodejs",
