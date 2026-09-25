@@ -56,6 +56,9 @@ export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig):
   // 2. Request new Bearer Token from StreamGuys OAuth endpoint using Password Grant
   try {
     const tokenUrl = `${host.replace(/\/$/, '')}/oauth/token`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
+
     const response = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
@@ -70,7 +73,9 @@ export async function getStreamGuysAccessToken(customConfig?: StreamGuysConfig):
         password: password,
         scope: '*',
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();

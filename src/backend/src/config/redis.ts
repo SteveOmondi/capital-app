@@ -6,10 +6,13 @@ export const redis = new Redis({
   port: config.redis.port,
   password: config.redis.password,
   lazyConnect: true,
-  maxRetriesPerRequest: 3,
+  connectTimeout: 500, // Strict 500ms connection timeout to prevent 20s request hangs
+  commandTimeout: 300, // Strict 300ms command execution timeout
+  enableOfflineQueue: false, // Do not queue commands when Redis is offline
+  maxRetriesPerRequest: 1,
   retryStrategy(times) {
-    const delay = Math.min(times * 200, 2000);
-    return delay;
+    if (times > 3) return null;
+    return Math.min(times * 100, 500);
   },
 });
 

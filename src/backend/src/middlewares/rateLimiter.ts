@@ -14,14 +14,17 @@ export const apiRateLimiter = rateLimit({
     statusCode: 429,
     message: 'Too Many Requests. Rate limit of 60 requests per minute exceeded.',
   },
-  store:
-    redis.status === 'ready'
-      ? new RedisStore({
-          // @ts-expect-error ioredis type compatibility with rate-limit-redis
-          sendCommand: (...args: string[]) => redis.call(...args),
-          prefix: 'rl:bff:',
-        })
-      : undefined,
+  store: new RedisStore({
+    sendCommand: async (...args: string[]) => {
+      if (redis.status !== 'ready') return null;
+      try {
+        return await (redis.call as any)(...args);
+      } catch (_) {
+        return null; // Fail-open: if Redis connection is lost, do not block HTTP traffic
+      }
+    },
+    prefix: 'rl:bff:',
+  }),
   handler: (req, res, next, options) => {
     logger.warn({ ip: req.ip, url: req.originalUrl }, 'API rate limit exceeded by client IP');
     res.status(options.statusCode).json(options.message);
