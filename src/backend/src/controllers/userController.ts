@@ -34,10 +34,9 @@ export async function getProfileHandler(req: Request, res: Response, next: NextF
       return;
     }
 
-    const profile = await getUserProfileByEmail(email);
+    let profile = await getUserProfileByEmail(email);
     if (!profile) {
-      res.status(404).json({ status: 'error', message: 'User profile not found.' });
-      return;
+      profile = await upsertUserProfile({ email, username: req.user?.username });
     }
 
     res.status(200).json({
