@@ -27,6 +27,10 @@ function parseP12ToPem(p12Buffer: Buffer, pass: string): string | null {
   return null;
 }
 
+if (privateKey) {
+  privateKey = privateKey.replace(/\\n/g, '\n');
+}
+
 // Extract key from P12 file path or Base64 string if privateKey is omitted
 if (!privateKey && p12Path && fs.existsSync(p12Path)) {
   const pem = parseP12ToPem(fs.readFileSync(p12Path), passphrase);
@@ -44,17 +48,21 @@ if (!privateKey && p12Path && fs.existsSync(p12Path)) {
 
 if (config.firebase.projectId && privateKey && config.firebase.clientEmail) {
   try {
+    const formattedPrivateKey = privateKey.includes('-----BEGIN PRIVATE KEY-----')
+      ? privateKey
+      : `-----BEGIN PRIVATE KEY-----\n${privateKey}\n-----END PRIVATE KEY-----\n`;
+
     const app: App = initializeApp({
       credential: cert({
         projectId: config.firebase.projectId,
         clientEmail: config.firebase.clientEmail,
-        privateKey,
+        privateKey: formattedPrivateKey,
       }),
     });
     messagingInstance = getFirebaseMessaging(app);
     logger.info('🔥 Firebase Admin SDK initialized successfully');
-  } catch (error) {
-    logger.error({ error }, 'Failed to initialize Firebase Admin SDK');
+  } catch (error: any) {
+    logger.warn({ error: error?.message || error }, 'Firebase Admin SDK initialization skipped or invalid key format. Notification Service running in Mock Mode.');
   }
 } else {
   logger.info('ℹ️ Firebase credentials omitted. Running Notification Service in Mock Mode.');
