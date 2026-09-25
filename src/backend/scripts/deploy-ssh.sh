@@ -21,6 +21,10 @@ echo "================================================================="
 
 # 1. Ensure required infrastructure directory structure exists
 mkdir -p "$APP_DIR/data/postgres" "$APP_DIR/data/redis" "$APP_DIR/nginx"
+if [ -d "$APP_DIR/nginx/nginx.conf" ]; then
+    echo "Cleaning up erroneous directory mount at $APP_DIR/nginx/nginx.conf..."
+    rm -rf "$APP_DIR/nginx/nginx.conf"
+fi
 cd "$APP_DIR"
 
 # 2. Record previous stable image tag for potential rollback

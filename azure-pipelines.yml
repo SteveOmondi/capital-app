@@ -174,43 +174,46 @@ stages:
               SCP_CMD="scp -P $(PROD_SSH_PORT) -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
 
               echo "Ensuring target directory structure exists on $(PROD_SSH_HOST)..."
-              $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "mkdir -p /opt/apps/capital-app/scripts"
+              $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "mkdir -p /opt/apps/capital-app/scripts /opt/apps/capital-app/nginx"
 
-              echo "Copying deployment configuration and scripts to $(PROD_SSH_HOST)..."
+              echo "Copying deployment configuration, NGINX config, and scripts to $(PROD_SSH_HOST)..."
               $SCP_CMD src/backend/docker-compose.prod.yml $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/docker-compose.prod.yml
+              $SCP_CMD src/backend/nginx/nginx.conf $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/nginx/nginx.conf
               $SCP_CMD src/backend/scripts/deploy-ssh.sh $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/scripts/deploy-ssh.sh
               $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "chmod +x /opt/apps/capital-app/scripts/deploy-ssh.sh"
 
-              echo "Generating runtime .env file on remote production host..."
-              $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "printf '%s\n' \
-                'NODE_ENV=production' \
-                'PORT=3000' \
-                'LOG_LEVEL=info' \
-                'PUBLIC_BASE_URL=https://api.datalait.co.ke' \
-                'POSTGRES_USER=$(POSTGRES_USER)' \
-                'POSTGRES_PASSWORD=$(POSTGRES_PASSWORD)' \
-                'POSTGRES_DB=$(POSTGRES_DB)' \
-                'DATABASE_URL=$(DATABASE_URL)' \
-                'REDIS_HOST=$(REDIS_HOST)' \
-                'REDIS_PORT=$(REDIS_PORT)' \
-                'REDIS_PASSWORD=$(REDIS_PASSWORD)' \
-                'WP_WEBHOOK_SECRET=$(WP_WEBHOOK_SECRET)' \
-                'WP_CMS_BASE_URL=$(WP_CMS_BASE_URL)' \
-                'PODCAST_RSS_URL=$(PODCAST_RSS_URL)' \
-                'LIVE_STREAM_PRIMARY_URL=$(LIVE_STREAM_PRIMARY_URL)' \
-                'LIVE_STREAM_FALLBACK_URL=$(LIVE_STREAM_FALLBACK_URL)' \
-                'ICY_STREAM_URL=$(ICY_STREAM_URL)' \
-                'FIREBASE_PROJECT_ID=$(FIREBASE_PROJECT_ID)' \
-                'FIREBASE_CLIENT_EMAIL=$(FIREBASE_CLIENT_EMAIL)' \
-                'FIREBASE_PRIVATE_KEY=$(FIREBASE_PRIVATE_KEY)' \
-                'FIREBASE_P12_PASSPHRASE=$(FIREBASE_P12_PASSPHRASE)' \
-                'FIREBASE_P12_BASE64=$(FIREBASE_P12_BASE64)' \
-                'STREAMGUYS_HOST=$(STREAMGUYS_HOST)' \
-                'STREAMGUYS_CLIENT_ID=$(STREAMGUYS_CLIENT_ID)' \
-                'STREAMGUYS_CLIENT_SECRET=$(STREAMGUYS_CLIENT_SECRET)' \
-                'STREAMGUYS_USERNAME=$(STREAMGUYS_USERNAME)' \
-                'STREAMGUYS_PASSWORD=$(STREAMGUYS_PASSWORD)' \
-                > /opt/apps/capital-app/.env"
+              echo "Generating runtime .env file safely on pipeline agent..."
+              cat << 'EOF' > /tmp/runtime.env
+NODE_ENV=production
+PORT=3000
+LOG_LEVEL=info
+PUBLIC_BASE_URL=https://api.datalait.co.ke
+POSTGRES_USER=$(POSTGRES_USER)
+POSTGRES_PASSWORD=$(POSTGRES_PASSWORD)
+POSTGRES_DB=$(POSTGRES_DB)
+DATABASE_URL=$(DATABASE_URL)
+REDIS_HOST=$(REDIS_HOST)
+REDIS_PORT=$(REDIS_PORT)
+REDIS_PASSWORD=$(REDIS_PASSWORD)
+WP_WEBHOOK_SECRET=$(WP_WEBHOOK_SECRET)
+WP_CMS_BASE_URL=$(WP_CMS_BASE_URL)
+PODCAST_RSS_URL=$(PODCAST_RSS_URL)
+LIVE_STREAM_PRIMARY_URL=$(LIVE_STREAM_PRIMARY_URL)
+LIVE_STREAM_FALLBACK_URL=$(LIVE_STREAM_FALLBACK_URL)
+ICY_STREAM_URL=$(ICY_STREAM_URL)
+FIREBASE_PROJECT_ID=$(FIREBASE_PROJECT_ID)
+FIREBASE_CLIENT_EMAIL=$(FIREBASE_CLIENT_EMAIL)
+FIREBASE_PRIVATE_KEY=$(FIREBASE_PRIVATE_KEY)
+FIREBASE_P12_PASSPHRASE=$(FIREBASE_P12_PASSPHRASE)
+FIREBASE_P12_BASE64=$(FIREBASE_P12_BASE64)
+STREAMGUYS_HOST=$(STREAMGUYS_HOST)
+STREAMGUYS_CLIENT_ID=$(STREAMGUYS_CLIENT_ID)
+STREAMGUYS_CLIENT_SECRET=$(STREAMGUYS_CLIENT_SECRET)
+STREAMGUYS_USERNAME=$(STREAMGUYS_USERNAME)
+STREAMGUYS_PASSWORD=$(STREAMGUYS_PASSWORD)
+EOF
+
+              $SCP_CMD /tmp/runtime.env $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/.env
 
               echo "Triggering remote deployment and healthcheck verification..."
               $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) \
