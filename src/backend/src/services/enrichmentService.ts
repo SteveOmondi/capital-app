@@ -37,7 +37,11 @@ export async function fetchAlbumArtwork(artist: string, title: string): Promise<
 
   try {
     const iTunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`;
-    const response = await fetch(iTunesUrl);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 350);
+
+    const response = await fetch(iTunesUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return defaultPayload;

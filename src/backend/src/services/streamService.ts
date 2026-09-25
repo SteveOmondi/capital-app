@@ -245,10 +245,10 @@ export async function getNowPlayingTrack(baseUrl?: string): Promise<NowPlayingDT
 
   let rawMetadataString = 'Capital FM - Live Radio Stream';
 
-  // Attempt lightweight ICY header poll from ICY stream endpoint
+  // Attempt lightweight ICY header poll from ICY stream endpoint with fast 250ms timeout
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const timeoutId = setTimeout(() => controller.abort(), 250);
 
     const targetIcyUrl = config.streamguys.icyStreamUrl || config.services.icyStreamUrl;
     const response = await fetch(targetIcyUrl, {
@@ -268,12 +268,12 @@ export async function getNowPlayingTrack(baseUrl?: string): Promise<NowPlayingDT
       rawMetadataString = icyMetaHeader;
     }
   } catch (error) {
-    // If live ICY connection times out, use default/cached track string
+    // If live ICY connection times out or fails fast, use default/cached track string
   }
 
   const parsed = parseIcyMetadataString(rawMetadataString);
-  const enriched = await fetchAlbumArtwork(parsed.artist, parsed.title);
-  const [streamConfig, currentShow, liveState] = await Promise.all([
+  const [enriched, streamConfig, currentShow, liveState] = await Promise.all([
+    fetchAlbumArtwork(parsed.artist, parsed.title),
     getStreamConfig(baseUrl),
     getCurrentLiveShow(),
     getLiveState(),

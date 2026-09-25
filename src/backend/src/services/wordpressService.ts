@@ -4,6 +4,20 @@ import { prisma } from '../config/db';
 import { redis } from '../config/redis';
 import { logger } from '../middlewares/logger';
 
+export interface AuthorDTO {
+  id?: number;
+  name: string;
+  slug?: string;
+  bio?: string;
+  avatarUrl?: string;
+  archiveUrl?: string;
+  presenter?: {
+    id?: number;
+    slug?: string;
+    name?: string;
+  } | null;
+}
+
 export interface ArticleDTO {
   id: number;
   slug: string;
@@ -12,6 +26,7 @@ export interface ArticleDTO {
   content: string;
   categorySlug: string;
   author: string;
+  authorDetails?: AuthorDTO;
   coverImageUrl?: string;
   publishedAt: string;
   publishedAtTimestamp: number;
@@ -60,6 +75,34 @@ const DEFAULT_CATEGORIES: CategoryDTO[] = [
 ];
 
 /**
+ * Parses author object from WordPress / Capital FM API response into AuthorDTO.
+ */
+function parseAuthorDetails(rawAuthor: any, embeddedAuthor?: any): AuthorDTO {
+  const authorObj = typeof rawAuthor === 'object' && rawAuthor !== null ? rawAuthor : embeddedAuthor || {};
+  const name = typeof rawAuthor === 'string'
+    ? rawAuthor
+    : authorObj.name || authorObj.display_name || 'Capital Digital';
+
+  const id = authorObj.id ? parseInt(String(authorObj.id), 10) : undefined;
+  const slug = authorObj.slug || authorObj.nicename || (id ? `author-${id}` : undefined);
+  const rawBio = authorObj.bio || authorObj.description;
+  const bio = rawBio ? stripHtml(rawBio) : undefined;
+  const avatarUrl = authorObj.photo || authorObj.avatar || authorObj.avatar_urls?.['96'] || authorObj.avatar_urls?.['48'] || undefined;
+  const archiveUrl = authorObj.archive_url || authorObj.url || authorObj.link || undefined;
+  const presenter = authorObj.presenter || null;
+
+  return {
+    id,
+    name,
+    slug,
+    bio,
+    avatarUrl,
+    archiveUrl,
+    presenter,
+  };
+}
+
+/**
  * Transforms raw Capital FM API article JSON into ArticleDTO.
  */
 function transformApiArticle(item: any): ArticleDTO {
@@ -77,7 +120,9 @@ function transformApiArticle(item: any): ArticleDTO {
     coverImageUrl = item._embedded['wp:featuredmedia'][0].source_url;
   }
 
-  const authorName = typeof item.author === 'object' ? item.author?.name || 'Capital Digital' : item.author || 'Capital Digital';
+  const embeddedAuthor = item._embedded && Array.isArray(item._embedded['author']) ? item._embedded['author'][0] : undefined;
+  const authorDetails = parseAuthorDetails(item.author, embeddedAuthor);
+  const authorName = authorDetails.name || 'Capital Digital';
   const pubDateStr = item.published_at || item.publishedAt || item.date || new Date().toISOString();
   const publishedAtTimestamp = new Date(pubDateStr).getTime() || Date.now();
 
@@ -91,6 +136,7 @@ function transformApiArticle(item: any): ArticleDTO {
     content,
     categorySlug,
     author: authorName,
+    authorDetails,
     coverImageUrl,
     publishedAt: new Date(publishedAtTimestamp).toISOString(),
     publishedAtTimestamp,
@@ -283,7 +329,12 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
   const url = `${config.services.capitalFmApiBaseUrl}/articles?${queryParams.toString()}`;
 
   try {
-    const response = await fetch(url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
+
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
       throw new Error(`Capital FM Articles API returned status ${response.status}`);
     }
@@ -296,7 +347,9 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
 
     const articles = rawPosts.map((post: any) => transformApiArticle(post));
 
-    syncArticlesToPostgres(articles);
+    setImmediate(() => {
+      syncArticlesToPostgres(articles).catch(() => {});
+    });
 
     const result = { articles, total: total || articles.length, page, limit };
 

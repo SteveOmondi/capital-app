@@ -35,6 +35,7 @@ This document provides complete API contracts, endpoint specifications, JSON DTO
 - **Endpoint**: `GET /api/v1/news`
 - **Query Params**:
   - `category` (optional, e.g. `sports`, `business` or `all`)
+  - `author` (optional, e.g. `jane-doe` or `42` to filter by author)
   - `page` (default: 1)
   - `limit` (default: 10, max: 50)
   - `search` (optional, full-text search term e.g. `nairobi`)
@@ -51,13 +52,54 @@ This document provides complete API contracts, endpoint specifications, JSON DTO
         "excerpt": "Traffic flow restored on Expressway following clear lanes.",
         "content": "Full article body content...",
         "categorySlug": "news",
-        "author": "Capital Digital",
+        "author": "Jane Doe",
+        "authorDetails": {
+          "id": 42,
+          "name": "Jane Doe",
+          "slug": "jane-doe",
+          "bio": "Senior Business Reporter at Capital FM",
+          "avatarUrl": "https://www.capitalfm.africa/wp-content/uploads/authors/jane.jpg",
+          "archiveUrl": "https://www.capitalfm.africa/author/jane-doe/",
+          "presenter": { "id": 15, "slug": "jane-doe", "name": "Jane Doe" }
+        },
         "coverImageUrl": "https://www.capitalfm.africa/wp-content/uploads/2026/08/traffic.jpg",
         "publishedAt": "2026-08-26T14:30:00.000Z",
         "publishedAtTimestamp": 1787754600000
       }
     ],
     "total": 1,
+    "page": 1,
+    "limit": 10
+  }
+}
+```
+
+### 1.3 Author Profile & Author Articles Page
+- **Endpoint**: `GET /api/v1/news/author/:idOrSlug`
+- **Query Params**: `page` (default: 1), `limit` (default: 10)
+- **Response**:
+```json
+{
+  "status": "success",
+  "data": {
+    "author": {
+      "id": 42,
+      "name": "Jane Doe",
+      "slug": "jane-doe",
+      "bio": "Senior Business Reporter at Capital FM",
+      "avatarUrl": "https://www.capitalfm.africa/wp-content/uploads/authors/jane.jpg",
+      "archiveUrl": "https://www.capitalfm.africa/author/jane-doe/",
+      "presenter": { "id": 15, "slug": "jane-doe", "name": "Jane Doe" }
+    },
+    "articles": [
+      {
+        "id": 10452,
+        "title": "Expressway Traffic Flow Restored",
+        "slug": "expressway-traffic-restored",
+        "publishedAt": "2026-08-26T14:30:00.000Z"
+      }
+    ],
+    "total": 24,
     "page": 1,
     "limit": 10
   }

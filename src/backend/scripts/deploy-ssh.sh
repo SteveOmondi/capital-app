@@ -20,7 +20,7 @@ echo " Containerized DB: $DEPLOY_CONTAINERIZED_DB | Containerized Redis: $DEPLOY
 echo "================================================================="
 
 # 1. Ensure required infrastructure directory structure exists
-mkdir -p "$APP_DIR/data/postgres" "$APP_DIR/data/redis"
+mkdir -p "$APP_DIR/data/postgres" "$APP_DIR/data/redis" "$APP_DIR/nginx"
 cd "$APP_DIR"
 
 # 2. Record previous stable image tag for potential rollback
@@ -47,16 +47,16 @@ fi
 export DOCKER_IMAGE
 export DOCKER_IMAGE_TAG
 
-echo "Launching application containers via Docker Compose..."
+echo "Launching 3 backend API instances + NGINX round-robin load balancer via Docker Compose..."
 docker compose $PROFILES -f "$APP_DIR/docker-compose.prod.yml" up -d --remove-orphans
 
 # 5. Run Prisma Database Migrations / Schema Sync inside container
 echo "Executing Prisma database schema synchronization..."
-if docker compose -f "$APP_DIR/docker-compose.prod.yml" exec -T backend npx prisma migrate deploy 2>/dev/null; then
+if docker compose -f "$APP_DIR/docker-compose.prod.yml" exec -T backend_1 npx prisma migrate deploy 2>/dev/null; then
     echo "Prisma migrations applied successfully."
 else
     echo "Prisma migrate deploy bypassed/failed. Executing schema sync (prisma db push)..."
-    if ! docker compose -f "$APP_DIR/docker-compose.prod.yml" exec -T backend npx prisma db push --skip-generate; then
+    if ! docker compose -f "$APP_DIR/docker-compose.prod.yml" exec -T backend_1 npx prisma db push --skip-generate; then
         echo "ERROR: Prisma schema synchronization failed!"
         TRIGGER_ROLLBACK=true
     else
