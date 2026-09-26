@@ -154,7 +154,7 @@ export async function performGlobalSearch(params: GlobalSearchQuery): Promise<Gl
   };
 
   if (redis.status === 'ready') {
-    redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {});
+    redis.setex(cacheKey, 900, JSON.stringify(result)).catch(() => {});
   }
 
   return result;

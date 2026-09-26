@@ -243,74 +243,18 @@ export async function getNewsCategories(): Promise<CategoryDTO[]> {
 }
 
 /**
- * Fetches articles collection (/articles) with filtering, pagination, Redis caching & FTS fallback.
+ * Helper to fetch directly from WordPress REST API, update Postgres, and update Redis.
  */
-export async function getArticles(params: FetchArticlesQuery): Promise<{ articles: ArticleDTO[]; total: number; page: number; limit: number }> {
+async function fetchFromWordPressApiAndSave(
+  params: FetchArticlesQuery,
+  cacheKey: string
+): Promise<{ articles: ArticleDTO[]; total: number; page: number; limit: number }> {
   const page = Math.max(1, params.page || 1);
   const limit = Math.min(50, Math.max(1, params.limit || 10));
   const category = params.category || 'all';
   const search = params.search?.trim();
   const fields = params.fields || 'summary';
 
-  // 1. Check PostgreSQL Full Text Search if search query present
-  if (search && search.length > 0) {
-    try {
-      const skip = (page - 1) * limit;
-      const whereCondition: any = {
-        OR: [
-          { title: { contains: search, mode: 'insensitive' } },
-          { content: { contains: search, mode: 'insensitive' } },
-          { excerpt: { contains: search, mode: 'insensitive' } },
-        ],
-      };
-
-      if (category !== 'all') {
-        whereCondition.categorySlug = category;
-      }
-
-      const [items, total] = await Promise.all([
-        prisma.article.findMany({
-          where: whereCondition,
-          orderBy: { publishedAt: 'desc' },
-          skip,
-          take: limit,
-        }),
-        prisma.article.count({ where: whereCondition }),
-      ]);
-
-      if (total > 0) {
-        const articles: ArticleDTO[] = items.map((item) => ({
-          id: item.id,
-          slug: item.slug,
-          title: item.title,
-          excerpt: item.excerpt || item.title,
-          content: item.content,
-          categorySlug: item.categorySlug,
-          author: item.author || 'Capital Digital',
-          coverImageUrl: item.coverImageUrl || undefined,
-          publishedAt: item.publishedAt.toISOString(),
-          publishedAtTimestamp: item.publishedAt.getTime(),
-        }));
-
-        return { articles, total, page, limit };
-      }
-    } catch (dbError) {
-      logger.warn({ dbError }, 'PostgreSQL FTS query failed, falling back to WP API');
-    }
-  }
-
-  // 2. Check Redis Cache
-  const cacheKey = `articles:${category}:page:${page}:limit:${limit}:${fields}:${search || ''}`;
-  if (!search && redis.status === 'ready') {
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        return JSON.parse(cached);
-      }
-    } catch (_) {}
-  }
-
-  // 3. Query Capital FM Public API
   const queryParams = new URLSearchParams();
   queryParams.set('page', String(page));
   queryParams.set('per_page', String(limit));
@@ -328,49 +272,104 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
 
   const url = `${config.services.capitalFmApiBaseUrl}/articles?${queryParams.toString()}`;
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
+  const response = await fetch(url, { signal: controller.signal });
+  clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      throw new Error(`Capital FM Articles API returned status ${response.status}`);
-    }
+  if (!response.ok) {
+    throw new Error(`Capital FM Articles API returned status ${response.status}`);
+  }
 
-    const totalHeader = response.headers.get('X-WP-Total') || response.headers.get('meta.total');
-    const json = (await response.json()) as any;
+  const totalHeader = response.headers.get('X-WP-Total') || response.headers.get('meta.total');
+  const json = (await response.json()) as any;
 
-    const rawPosts = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
-    const total = json.meta?.total !== undefined ? json.meta.total : totalHeader ? parseInt(totalHeader, 10) : rawPosts.length;
+  const rawPosts = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
+  const total = json.meta?.total !== undefined ? json.meta.total : totalHeader ? parseInt(totalHeader, 10) : rawPosts.length;
 
-    const articles = rawPosts.map((post: any) => transformApiArticle(post));
+  const articles = rawPosts.map((post: any) => transformApiArticle(post));
 
-    setImmediate(() => {
-      syncArticlesToPostgres(articles).catch(() => {});
+  // Sync to PostgreSQL DB
+  await syncArticlesToPostgres(articles);
+
+  const result = { articles, total: total || articles.length, page, limit };
+
+  // Write to Redis with 15 min TTL (900s)
+  if (redis.status === 'ready') {
+    await redis.setex(cacheKey, 900, JSON.stringify(result)).catch(() => {});
+  }
+
+  return result;
+}
+
+/**
+ * Triggers an asynchronous refetch of content from WordPress API in the background.
+ */
+function triggerBackgroundWordPressSync(params: FetchArticlesQuery, cacheKey: string): void {
+  setImmediate(() => {
+    fetchFromWordPressApiAndSave(params, cacheKey).catch((err) => {
+      logger.warn({ err }, 'Background WordPress refetch failed silently');
     });
+  });
+}
 
-    const result = { articles, total: total || articles.length, page, limit };
+/**
+ * Fetches articles collection with 3-tier fallback & background revalidation:
+ * 1. Return Redis Cache (if present) + trigger background WP refetch
+ * 2. Return PostgreSQL DB (if present) + trigger background WP refetch
+ * 3. Fetch from WordPress API synchronously + populate DB & Redis
+ */
+export async function getArticles(params: FetchArticlesQuery): Promise<{ articles: ArticleDTO[]; total: number; page: number; limit: number }> {
+  const page = Math.max(1, params.page || 1);
+  const limit = Math.min(50, Math.max(1, params.limit || 10));
+  const category = params.category || 'all';
+  const search = params.search?.trim();
+  const fields = params.fields || 'summary';
 
-    if (!search && redis.status === 'ready') {
-      redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {});
+  const cacheKey = `articles:${category}:page:${page}:limit:${limit}:${fields}:${search || ''}`;
+
+  // 1. Check Redis Cache
+  if (redis.status === 'ready') {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        const result = JSON.parse(cached);
+        // Trigger background refetch from WordPress API to keep Postgres & Redis fresh
+        triggerBackgroundWordPressSync(params, cacheKey);
+        return result;
+      }
+    } catch (_) {}
+  }
+
+  // 2. Check PostgreSQL Database (Prisma)
+  try {
+    const skip = (page - 1) * limit;
+    const whereCondition: any = {};
+
+    if (category !== 'all') {
+      whereCondition.categorySlug = category;
+    }
+    if (search && search.length > 0) {
+      whereCondition.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { content: { contains: search, mode: 'insensitive' } },
+        { excerpt: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
-    return result;
-  } catch (error) {
-    logger.error({ error, url }, 'Failed to fetch articles from Capital FM Public API');
-
-    // DB Fallback
-    try {
-      const skip = (page - 1) * limit;
-      const dbArticles = await prisma.article.findMany({
+    const [items, total] = await Promise.all([
+      prisma.article.findMany({
+        where: whereCondition,
         orderBy: { publishedAt: 'desc' },
         skip,
         take: limit,
-      });
+      }),
+      prisma.article.count({ where: whereCondition }),
+    ]);
 
-      const fallbackDtos: ArticleDTO[] = dbArticles.map((item) => ({
+    if (total > 0) {
+      const articles: ArticleDTO[] = items.map((item) => ({
         id: item.id,
         slug: item.slug,
         title: item.title,
@@ -383,10 +382,28 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
         publishedAtTimestamp: item.publishedAt.getTime(),
       }));
 
-      return { articles: fallbackDtos, total: fallbackDtos.length, page, limit };
-    } catch (_) {
-      throw error;
+      const result = { articles, total, page, limit };
+
+      // Cache result in Redis for subsequent hits with 15 min TTL (900s)
+      if (redis.status === 'ready') {
+        redis.setex(cacheKey, 900, JSON.stringify(result)).catch(() => {});
+      }
+
+      // Trigger background refetch from WordPress API to keep Postgres & Redis updated
+      triggerBackgroundWordPressSync(params, cacheKey);
+
+      return result;
     }
+  } catch (dbError) {
+    logger.warn({ dbError }, 'PostgreSQL query skipped or empty, attempting direct WordPress fetch');
+  }
+
+  // 3. Fallback: Query WordPress API synchronously if neither Redis nor Postgres has data
+  try {
+    return await fetchFromWordPressApiAndSave(params, cacheKey);
+  } catch (error) {
+    logger.error({ error }, 'Failed to fetch articles from WordPress API');
+    return { articles: [], total: 0, page, limit };
   }
 }
 
@@ -423,7 +440,7 @@ export async function getTrendingArticles(days: number = 7, category?: string): 
     const articles = rawItems.map((item: any) => transformApiArticle(item));
 
     if (redis.status === 'ready' && articles.length > 0) {
-      redis.setex(cacheKey, 600, JSON.stringify(articles)).catch(() => {});
+      redis.setex(cacheKey, 900, JSON.stringify(articles)).catch(() => {});
     }
 
     return articles;
@@ -434,21 +451,89 @@ export async function getTrendingArticles(days: number = 7, category?: string): 
 }
 
 /**
- * Fetches single article by ID or Slug (/articles/{id-or-slug}).
- * Returns full payload including content.html, seo, share, and related[].
+ * Triggers an asynchronous refetch of single article from WordPress API in the background.
+ */
+function triggerBackgroundArticleSync(idOrSlug: string, cacheKey: string): void {
+  setImmediate(async () => {
+    try {
+      const url = `${config.services.capitalFmApiBaseUrl}/articles/${encodeURIComponent(idOrSlug)}`;
+      const response = await fetch(url);
+      if (response.ok) {
+        const json = (await response.json()) as any;
+        const rawData = json.data || json;
+        const article = transformApiArticle(rawData);
+        if (article) {
+          await syncArticlesToPostgres([article]);
+          if (redis.status === 'ready') {
+            await redis.setex(cacheKey, 900, JSON.stringify(article)).catch(() => {});
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, idOrSlug }, 'Background single article refetch failed silently');
+    }
+  });
+}
+
+/**
+ * Fetches single article by ID or Slug (/articles/{id-or-slug}) with 3-tier fallback:
+ * 1. Return Redis Cache (if present) + trigger background WP refetch
+ * 2. Return PostgreSQL DB (if present) + update Redis with refreshed TTL + trigger background WP refetch
+ * 3. Fetch from WordPress API + update Postgres & Redis with refreshed TTL
  */
 export async function getArticleBySlug(idOrSlug: string): Promise<ArticleDTO | null> {
   const cacheKey = `articles:detail:${idOrSlug}`;
 
+  // 1. Check Redis Cache
   if (redis.status === 'ready') {
     try {
       const cached = await redis.get(cacheKey);
       if (cached) {
-        return JSON.parse(cached);
+        const article = JSON.parse(cached);
+        triggerBackgroundArticleSync(idOrSlug, cacheKey);
+        return article;
       }
     } catch (_) {}
   }
 
+  // 2. Check PostgreSQL DB
+  try {
+    const parsedId = parseInt(idOrSlug, 10);
+    const whereCondition = isNaN(parsedId) ? { slug: idOrSlug } : { id: parsedId };
+
+    const dbArticle = await prisma.article.findFirst({
+      where: whereCondition,
+    });
+
+    if (dbArticle) {
+      const article: ArticleDTO = {
+        id: dbArticle.id,
+        slug: dbArticle.slug,
+        title: dbArticle.title,
+        excerpt: dbArticle.excerpt || dbArticle.title,
+        content: dbArticle.content,
+        categorySlug: dbArticle.categorySlug,
+        author: dbArticle.author || 'Capital Digital',
+        coverImageUrl: dbArticle.coverImageUrl || undefined,
+        publishedAt: dbArticle.publishedAt.toISOString(),
+        publishedAtTimestamp: dbArticle.publishedAt.getTime(),
+      };
+
+      // Update Redis content and reset TTL to 900s (15 mins)
+      if (redis.status === 'ready') {
+        redis.setex(cacheKey, 900, JSON.stringify(article)).catch(() => {});
+      }
+
+      // Trigger background refetch from WordPress
+      triggerBackgroundArticleSync(idOrSlug, cacheKey);
+
+      return article;
+    }
+  } catch (dbErr) {
+    logger.warn({ dbErr, idOrSlug }, 'PostgreSQL article lookup skipped or failed');
+  }
+
+  // 3. Fallback: Query WordPress API synchronously if neither Redis nor DB has data
   const url = `${config.services.capitalFmApiBaseUrl}/articles/${encodeURIComponent(idOrSlug)}`;
 
   try {
@@ -465,8 +550,11 @@ export async function getArticleBySlug(idOrSlug: string): Promise<ArticleDTO | n
 
     const article = transformApiArticle(rawData);
 
-    if (redis.status === 'ready' && article) {
-      redis.setex(cacheKey, 300, JSON.stringify(article)).catch(() => {});
+    if (article) {
+      await syncArticlesToPostgres([article]);
+      if (redis.status === 'ready') {
+        redis.setex(cacheKey, 900, JSON.stringify(article)).catch(() => {});
+      }
     }
 
     return article;

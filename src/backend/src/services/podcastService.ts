@@ -96,8 +96,121 @@ function transformWpEpisode(ep: any): PodcastEpisode {
 }
 
 /**
- * Fetches episodes collection (/podcasts/episodes) from WordPress Public API v2.3.1.
- * Supports filtering by group and search term.
+ * Helper to fetch directly from WordPress API + Atunwa RSS feeds, save to Postgres, and write to Redis.
+ */
+async function fetchPodcastsFromUpstreamAndSave(
+  query: FetchPodcastEpisodesQuery,
+  cacheKey: string
+): Promise<{ episodes: PodcastEpisode[]; total: number; page: number; limit: number }> {
+  const page = Math.max(1, query.page || 1);
+  const limit = Math.min(50, Math.max(1, query.limit || 10));
+  const group = query.group;
+  const search = query.search?.trim();
+
+  let episodes: PodcastEpisode[] = [];
+  let total = 0;
+
+  // A. Try WordPress Podcast API
+  try {
+    const queryParams = new URLSearchParams();
+    queryParams.set('page', String(page));
+    queryParams.set('per_page', String(limit));
+    if (group) queryParams.set('group', group);
+    if (search) queryParams.set('search', search);
+
+    const url = `${config.services.capitalFmApiBaseUrl}/podcasts/episodes?${queryParams.toString()}`;
+    const response = await fetch(url);
+
+    if (response.ok) {
+      const json = (await response.json()) as any;
+      const rawEpisodes = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
+      const totalHeader = response.headers.get('X-WP-Total');
+      total = json.meta?.total !== undefined ? json.meta.total : totalHeader ? parseInt(totalHeader, 10) : rawEpisodes.length;
+
+      episodes = rawEpisodes.map((ep: any) => transformWpEpisode(ep));
+    }
+  } catch (err) {
+    logger.warn({ err }, 'WordPress podcast fetch failed, falling back to Atunwa RSS Step');
+  }
+
+  // B. Fallback / Augment with Atunwa RSS & Website RSS Step if WP API was empty
+  if (episodes.length === 0) {
+    const fallbackChannel = await getWebsiteRssPodcastChannel();
+    const filtered = search ? fallbackChannel.episodes.filter((ep) => ep.title.toLowerCase().includes(search.toLowerCase())) : fallbackChannel.episodes;
+    const startIndex = (page - 1) * limit;
+
+    episodes = filtered.slice(startIndex, startIndex + limit);
+    total = filtered.length;
+  }
+
+  // C. Sync fetched episodes to PostgreSQL database
+  try {
+    const { prisma } = require('../config/db');
+    for (const ep of episodes) {
+      const epId = Math.abs(hashCode(ep.guid)) || (Date.now() % 2147483647);
+      await prisma.article.upsert({
+        where: { id: epId },
+        update: {
+          title: ep.title,
+          slug: `podcast-${ep.guid}`,
+          excerpt: ep.description,
+          content: ep.description,
+          categorySlug: group || 'podcasts',
+          author: 'Capital FM Podcasts',
+          coverImageUrl: ep.imageUrl,
+          publishedAt: new Date(ep.publishedTimestamp),
+        },
+        create: {
+          id: epId,
+          title: ep.title,
+          slug: `podcast-${ep.guid}`,
+          excerpt: ep.description,
+          content: ep.description,
+          categorySlug: group || 'podcasts',
+          author: 'Capital FM Podcasts',
+          coverImageUrl: ep.imageUrl,
+          publishedAt: new Date(ep.publishedTimestamp),
+        },
+      });
+    }
+  } catch (_) {}
+
+  const result = { episodes, total, page, limit };
+
+  // Write to Redis with refreshed TTL (900 seconds)
+  if (redis.status === 'ready' && episodes.length > 0) {
+    await redis.setex(cacheKey, 900, JSON.stringify(result)).catch(() => {});
+  }
+
+  return result;
+}
+
+/**
+ * Triggers background podcast refetch from Atunwa API & RSS feeds.
+ */
+function triggerBackgroundPodcastSync(query: FetchPodcastEpisodesQuery, cacheKey: string): void {
+  setImmediate(() => {
+    fetchPodcastsFromUpstreamAndSave(query, cacheKey).catch((err) => {
+      logger.warn({ err }, 'Background podcast sync failed silently');
+    });
+  });
+}
+
+function hashCode(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const chr = str.charCodeAt(i);
+    hash = (hash << 5) - hash + chr;
+    hash |= 0;
+  }
+  return hash;
+}
+
+/**
+ * Fetches podcast episodes collection with 3-tier fallback:
+ * 1. Redis Cache (if present) + trigger background Atunwa/RSS refetch
+ * 2. PostgreSQL DB (if present) + update Redis with refreshed 900s TTL + trigger background Atunwa/RSS refetch
+ * 3. Atunwa API & RSS Feeds (Upstream) + update Postgres & Redis with refreshed 900s TTL
  */
 export async function getPodcastEpisodes(query: FetchPodcastEpisodesQuery = {}): Promise<{ episodes: PodcastEpisode[]; total: number; page: number; limit: number }> {
   const page = Math.max(1, query.page || 1);
@@ -107,63 +220,77 @@ export async function getPodcastEpisodes(query: FetchPodcastEpisodesQuery = {}):
 
   const cacheKey = `podcasts:episodes:group:${group || 'all'}:search:${search || ''}:p:${page}:l:${limit}`;
 
+  // 1. Check Redis Cache
   if (redis.status === 'ready') {
     try {
       const cached = await redis.get(cacheKey);
       if (cached) {
-        return JSON.parse(cached);
+        const result = JSON.parse(cached);
+        triggerBackgroundPodcastSync(query, cacheKey);
+        return result;
       }
     } catch (_) {}
   }
 
-  const queryParams = new URLSearchParams();
-  queryParams.set('page', String(page));
-  queryParams.set('per_page', String(limit));
-  if (group) queryParams.set('group', group);
-  if (search) queryParams.set('search', search);
-
-  const url = `${config.services.capitalFmApiBaseUrl}/podcasts/episodes?${queryParams.toString()}`;
-
+  // 2. Check PostgreSQL Database (Prisma)
   try {
-    const response = await fetch(url);
-
-    // Handle 503 cache warming state gracefully
-    if (response.status === 503) {
-      logger.warn({ url }, 'WordPress Public API reported 503 cfm_podcasts_warming. Serving fallback episode index.');
-      throw new Error('503_WARMING');
+    const { prisma } = require('../config/db');
+    const skip = (page - 1) * limit;
+    const whereCondition: any = {
+      categorySlug: group || 'podcasts',
+    };
+    if (search && search.length > 0) {
+      whereCondition.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { excerpt: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
-    if (response.ok) {
-      const json = (await response.json()) as any;
-      const rawEpisodes = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
-      const totalHeader = response.headers.get('X-WP-Total');
-      const total = json.meta?.total !== undefined ? json.meta.total : totalHeader ? parseInt(totalHeader, 10) : rawEpisodes.length;
+    const [items, total] = await Promise.all([
+      prisma.article.findMany({
+        where: whereCondition,
+        orderBy: { publishedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.article.count({ where: whereCondition }),
+    ]);
 
-      const episodes = rawEpisodes.map((ep: any) => transformWpEpisode(ep));
+    if (total > 0) {
+      const episodes: PodcastEpisode[] = items.map((item: any) => ({
+        guid: item.slug.replace(/^podcast-/, ''),
+        title: item.title,
+        description: item.excerpt || item.title,
+        audioUrl: '',
+        duration: '45:00',
+        publishedAt: item.publishedAt.toISOString(),
+        publishedTimestamp: item.publishedAt.getTime(),
+        imageUrl: item.coverImageUrl || DEFAULT_IMAGE_URL,
+      }));
 
       const result = { episodes, total, page, limit };
 
-      if (redis.status === 'ready' && episodes.length > 0) {
+      // Update Redis content and reset/extend TTL to 900s
+      if (redis.status === 'ready') {
         redis.setex(cacheKey, 900, JSON.stringify(result)).catch(() => {});
       }
 
+      // Trigger background refetch from Atunwa API / RSS feeds
+      triggerBackgroundPodcastSync(query, cacheKey);
+
       return result;
     }
-  } catch (error) {
-    logger.warn({ error, url }, 'Failed to fetch podcast episodes from WordPress Public API');
+  } catch (dbErr) {
+    logger.warn({ dbErr }, 'PostgreSQL podcast query skipped or empty');
   }
 
-  // Fallback if WP API is unreachable or warming
-  const fallbackChannel = await getWebsiteRssPodcastChannel();
-  const filtered = search ? fallbackChannel.episodes.filter((ep) => ep.title.toLowerCase().includes(search.toLowerCase())) : fallbackChannel.episodes;
-  const startIndex = (page - 1) * limit;
-
-  return {
-    episodes: filtered.slice(startIndex, startIndex + limit),
-    total: filtered.length,
-    page,
-    limit,
-  };
+  // 3. Fallback: Query Atunwa API & RSS feeds synchronously if neither Redis nor DB has data
+  try {
+    return await fetchPodcastsFromUpstreamAndSave(query, cacheKey);
+  } catch (error) {
+    logger.error({ error }, 'Failed to fetch podcast episodes from Atunwa & RSS API');
+    return { episodes: [], total: 0, page, limit };
+  }
 }
 
 /**

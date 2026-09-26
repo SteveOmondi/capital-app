@@ -99,7 +99,7 @@ export async function getEvents(query: EventQuery): Promise<EventListResponseDTO
     };
 
     if (redis.status === 'ready') {
-      redis.setex(cacheKey, 300, JSON.stringify(result)).catch(() => {});
+      redis.setex(cacheKey, 900, JSON.stringify(result)).catch(() => {});
     }
 
     return result;
@@ -143,7 +143,7 @@ export async function getEventBySlug(idOrSlug: string): Promise<any | null> {
     const eventData = json.data || json;
 
     if (redis.status === 'ready' && eventData) {
-      redis.setex(cacheKey, 300, JSON.stringify(eventData)).catch(() => {});
+      redis.setex(cacheKey, 900, JSON.stringify(eventData)).catch(() => {});
     }
 
     return eventData;
