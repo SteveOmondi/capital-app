@@ -265,7 +265,7 @@ async function fetchFromWordPressApiAndSave(
   const url = `${config.services.capitalFmApiBaseUrl}/articles?${queryParams.toString()}`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   const response = await fetch(url, { signal: controller.signal });
   clearTimeout(timeoutId);
@@ -280,7 +280,13 @@ async function fetchFromWordPressApiAndSave(
   const rawPosts = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
   const total = json.meta?.total !== undefined ? json.meta.total : totalHeader ? parseInt(totalHeader, 10) : rawPosts.length;
 
-  const articles = rawPosts.map((post: any) => transformApiArticle(post));
+  const articles = rawPosts.map((post: any) => {
+    const art = transformApiArticle(post);
+    if (category !== 'all' && (art.categorySlug === 'news' || !art.categorySlug)) {
+      art.categorySlug = category;
+    }
+    return art;
+  });
 
   // Sync to PostgreSQL DB
   await syncArticlesToPostgres(articles);
