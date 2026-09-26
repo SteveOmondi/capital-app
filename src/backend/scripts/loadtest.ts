@@ -8,7 +8,7 @@ https.globalAgent.maxSockets = Infinity;
 
 interface LoadTestConfig {
   targetUrl: string;
-  mode: 'stream' | 'metadata' | 'mixed';
+  mode: 'stream' | 'metadata' | 'news' | 'mixed';
   vus: number;
   durationSeconds: number;
   rampUpSeconds: number;
@@ -24,7 +24,7 @@ function parseArgs(): LoadTestConfig {
 
   const targetUrl = process.env.TARGET_URL || getArg('target', 'http://localhost:3000');
   const modeVal = (process.env.MODE || getArg('mode', 'mixed')).toLowerCase();
-  const mode: 'stream' | 'metadata' | 'mixed' = ['stream', 'metadata', 'mixed'].includes(modeVal)
+  const mode: 'stream' | 'metadata' | 'news' | 'mixed' = ['stream', 'metadata', 'news', 'mixed'].includes(modeVal)
     ? (modeVal as any)
     : 'mixed';
   const vus = parseInt(process.env.VUS || getArg('vus', '100'), 10);
@@ -49,6 +49,10 @@ interface Metrics {
   metadataRequestsAttempted: number;
   metadataRequestsSuccess: number;
   metadataRequestsFailed: number;
+  newsRequestsAttempted: number;
+  newsRequestsSuccess: number;
+  newsRequestsFailed: number;
+  newsLatencyMsList: number[];
 }
 
 const metrics: Metrics = {
@@ -65,6 +69,10 @@ const metrics: Metrics = {
   metadataRequestsAttempted: 0,
   metadataRequestsSuccess: 0,
   metadataRequestsFailed: 0,
+  newsRequestsAttempted: 0,
+  newsRequestsSuccess: 0,
+  newsRequestsFailed: 0,
+  newsLatencyMsList: [],
 };
 
 let isRunning = true;
@@ -189,6 +197,61 @@ async function launchMetadataPoller(targetBaseUrl: string, intervalMs: number) {
   }
 }
 
+/**
+ * Simulates Virtual Users continuously fetching News API endpoints
+ */
+async function launchNewsPoller(vuId: number, targetBaseUrl: string) {
+  const endpoints = [
+    '/api/v1/news',
+    '/api/v1/news?category=news',
+    '/api/v1/news?category=sports',
+    '/api/v1/news?category=business',
+    '/api/v1/news?page=2',
+    '/api/v1/news/trending',
+  ];
+
+  let epIndex = vuId % endpoints.length;
+
+  while (isRunning) {
+    const endpoint = endpoints[epIndex];
+    epIndex = (epIndex + 1) % endpoints.length;
+
+    metrics.newsRequestsAttempted++;
+    const startTime = Date.now();
+    const urlStr = `${targetBaseUrl.replace(/\/$/, '')}${endpoint}`;
+
+    try {
+      const parsedUrl = new URL(urlStr);
+      const isHttps = parsedUrl.protocol === 'https:';
+      const clientLib = isHttps ? https : http;
+
+      await new Promise<void>((resolve) => {
+        const req = clientLib.get(urlStr, (res) => {
+          recordStatus(res.statusCode || 0);
+          if (res.statusCode === 200) {
+            metrics.newsRequestsSuccess++;
+            metrics.newsLatencyMsList.push(Date.now() - startTime);
+          } else {
+            metrics.newsRequestsFailed++;
+          }
+          res.resume();
+          res.on('end', resolve);
+        });
+        req.on('error', (err) => {
+          metrics.newsRequestsFailed++;
+          recordError(`News Poll Error: ${err.message}`);
+          resolve();
+        });
+      });
+    } catch (err: any) {
+      metrics.newsRequestsFailed++;
+      recordError(`News Exception: ${err.message}`);
+    }
+
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
 function calculatePercentiles(list: number[], percentiles: number[]): Record<string, number> {
   if (list.length === 0) return { p50: 0, p95: 0, p99: 0 };
   const sorted = [...list].sort((a, b) => a - b);
@@ -204,11 +267,11 @@ async function runLoadTest() {
   const config = parseArgs();
 
   console.log('\n===============================================================');
-  console.log(' 🔥 CAPITAL FM BACKEND GATEWAY STREAMING LOAD TEST');
+  console.log(' 🔥 CAPITAL FM BACKEND GATEWAY STREAMING & NEWS LOAD TEST');
   console.log('===============================================================');
   console.log(` Target Server URL    : ${config.targetUrl}`);
   console.log(` Test Mode            : ${config.mode.toUpperCase()}`);
-  console.log(` Target Concurrency   : ${config.vus} Virtual Streamers`);
+  console.log(` Target Concurrency   : ${config.vus} Virtual Users`);
   console.log(` Ramp-Up Duration     : ${config.rampUpSeconds} seconds`);
   console.log(` Total Test Duration  : ${config.durationSeconds} seconds`);
   console.log('===============================================================\n');
@@ -221,17 +284,26 @@ async function runLoadTest() {
     const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
     const bytesDelta = metrics.bytesReceived - lastBytes;
     lastBytes = metrics.bytesReceived;
-    const throughputKbps = ((bytesDelta / 1024) * 8).toFixed(1); // kilobits per sec
+    const throughputKbps = ((bytesDelta / 1024) * 8).toFixed(1);
     const totalMb = (metrics.bytesReceived / (1024 * 1024)).toFixed(2);
     const ramMb = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1);
 
-    console.log(
-      `[${elapsedSec}s] Active Streamers: ${metrics.activeStreamers}/${config.vus} | ` +
-      `Total Downloaded: ${totalMb} MB | ` +
-      `Throughput: ${throughputKbps} kbps | ` +
-      `Errors: ${metrics.failedStreams} | ` +
-      `RAM: ${ramMb} MB`
-    );
+    if (config.mode === 'news') {
+      console.log(
+        `[${elapsedSec}s] News Requests: ${metrics.newsRequestsAttempted} | ` +
+        `Success: ${metrics.newsRequestsSuccess} | ` +
+        `Failed: ${metrics.newsRequestsFailed} | ` +
+        `RAM: ${ramMb} MB`
+      );
+    } else {
+      console.log(
+        `[${elapsedSec}s] Active Streamers: ${metrics.activeStreamers}/${config.vus} | ` +
+        `Total Downloaded: ${totalMb} MB | ` +
+        `Throughput: ${throughputKbps} kbps | ` +
+        `Errors: ${metrics.failedStreams} | ` +
+        `RAM: ${ramMb} MB`
+      );
+    }
   }, 1000);
 
   // Ramp up VUs
@@ -247,8 +319,17 @@ async function runLoadTest() {
     }
   }
 
+  if (config.mode === 'news') {
+    for (let i = 1; i <= config.vus; i++) {
+      if (!isRunning) break;
+      launchNewsPoller(i, config.targetUrl);
+      if (rampStepMs > 0) {
+        await new Promise((r) => setTimeout(r, rampStepMs));
+      }
+    }
+  }
+
   if (config.mode === 'metadata' || config.mode === 'mixed') {
-    // Launch background metadata polling VUs
     for (let i = 0; i < Math.min(20, Math.ceil(config.vus / 5)); i++) {
       launchMetadataPoller(config.targetUrl, config.pollIntervalMs);
     }
@@ -271,25 +352,41 @@ async function runLoadTest() {
       ? (((metrics.bytesReceived * 8) / (totalDurationSec * metrics.activeStreamers * 1024))).toFixed(1)
       : '0.0';
 
-  const ttfbPercentiles = calculatePercentiles(metrics.ttfbMsList, [50, 95, 99]);
-
   console.log('\n===============================================================');
   console.log(' 📊 LOAD TEST EXECUTION SUMMARY REPORT');
   console.log('===============================================================');
   console.log(` Total Test Duration          : ${totalDurationSec.toFixed(2)} seconds`);
   console.log(` Target Concurrency           : ${config.vus} VUs`);
-  console.log(` Max Active Streamers Reached  : ${metrics.activeStreamers}`);
-  console.log(` Stream Attempts              : ${metrics.totalStreamsAttempted}`);
-  console.log(` Successful Streams           : ${metrics.successfulStreams}`);
-  console.log(` Failed Stream Connections    : ${metrics.failedStreams}`);
-  console.log(` Stream Disconnections/Drops  : ${metrics.streamDrops}`);
-  console.log(` Total Audio Data Received   : ${totalMb} MB`);
-  console.log(` Avg Bitrate Per Streamer    : ${avgBitratePerUserKbps} kbps`);
-  console.log(' ---------------------------------------------------------------');
-  console.log(' ⏱️ Time-To-First-Byte (TTFB Latency):');
-  console.log(`    Median (P50)              : ${ttfbPercentiles.p50} ms`);
-  console.log(`    95th Percentile (P95)     : ${ttfbPercentiles.p95} ms`);
-  console.log(`    99th Percentile (P99)     : ${ttfbPercentiles.p99} ms`);
+
+  if (config.mode === 'news') {
+    const newsLatencyPercentiles = calculatePercentiles(metrics.newsLatencyMsList, [50, 95, 99]);
+    const rps = (metrics.newsRequestsSuccess / totalDurationSec).toFixed(1);
+
+    console.log(` Total News Requests Attempted: ${metrics.newsRequestsAttempted}`);
+    console.log(` Successful (HTTP 200)        : ${metrics.newsRequestsSuccess}`);
+    console.log(` Failed Requests              : ${metrics.newsRequestsFailed}`);
+    console.log(` Average Throughput (RPS)     : ${rps} req/sec`);
+    console.log(' ---------------------------------------------------------------');
+    console.log(' ⏱️ News Endpoint Latency (ms):');
+    console.log(`    Median (P50)              : ${newsLatencyPercentiles.p50} ms`);
+    console.log(`    95th Percentile (P95)     : ${newsLatencyPercentiles.p95} ms`);
+    console.log(`    99th Percentile (P99)     : ${newsLatencyPercentiles.p99} ms`);
+  } else {
+    const ttfbPercentiles = calculatePercentiles(metrics.ttfbMsList, [50, 95, 99]);
+    console.log(` Max Active Streamers Reached  : ${metrics.activeStreamers}`);
+    console.log(` Stream Attempts              : ${metrics.totalStreamsAttempted}`);
+    console.log(` Successful Streams           : ${metrics.successfulStreams}`);
+    console.log(` Failed Stream Connections    : ${metrics.failedStreams}`);
+    console.log(` Stream Disconnections/Drops  : ${metrics.streamDrops}`);
+    console.log(` Total Audio Data Received   : ${totalMb} MB`);
+    console.log(` Avg Bitrate Per Streamer    : ${avgBitratePerUserKbps} kbps`);
+    console.log(' ---------------------------------------------------------------');
+    console.log(' ⏱️ Time-To-First-Byte (TTFB Latency):');
+    console.log(`    Median (P50)              : ${ttfbPercentiles.p50} ms`);
+    console.log(`    95th Percentile (P95)     : ${ttfbPercentiles.p95} ms`);
+    console.log(`    99th Percentile (P99)     : ${ttfbPercentiles.p99} ms`);
+  }
+
   console.log(' ---------------------------------------------------------------');
   console.log(' 🏷️ HTTP Status Code Breakdown:');
   for (const [status, count] of Object.entries(metrics.statusCodes)) {
@@ -302,29 +399,30 @@ async function runLoadTest() {
       console.log(`    ${err} : ${count}`);
     }
   }
-  if (config.mode !== 'stream') {
-    console.log(' ---------------------------------------------------------------');
-    console.log(' 📋 Metadata API Polling Stats:');
-    console.log(`    Attempted                 : ${metrics.metadataRequestsAttempted}`);
-    console.log(`    Successful (HTTP 200)     : ${metrics.metadataRequestsSuccess}`);
-    console.log(`    Failed                    : ${metrics.metadataRequestsFailed}`);
-  }
   console.log('===============================================================\n');
 
-  // Capacity evaluation verdict
-  const successRate = metrics.totalStreamsAttempted > 0
-    ? (metrics.successfulStreams / metrics.totalStreamsAttempted) * 100
-    : 100;
-
-  if (successRate >= 98 && metrics.activeStreamers >= config.vus * 0.9) {
-    console.log(` ✅ VERDICT: EXCELLENT PASS! Service successfully sustained ${metrics.activeStreamers} concurrent streamers (${successRate.toFixed(1)}% success rate).\n`);
-    process.exit(0);
-  } else if (successRate >= 90) {
-    console.log(` ⚠️ VERDICT: DEGRADED PASS. Service sustained ${metrics.activeStreamers} streamers with ${successRate.toFixed(1)}% success rate. Check network & server load.\n`);
-    process.exit(0);
+  if (config.mode === 'news') {
+    const successRate = metrics.newsRequestsAttempted > 0
+      ? (metrics.newsRequestsSuccess / metrics.newsRequestsAttempted) * 100
+      : 100;
+    if (successRate >= 98) {
+      console.log(` ✅ VERDICT: EXCELLENT PASS! News APIs sustained ${config.vus} VUs with ${successRate.toFixed(1)}% success rate.\n`);
+      process.exit(0);
+    } else {
+      console.log(` ❌ VERDICT: BOTTLENECK REACHED. News API success rate: ${successRate.toFixed(1)}%.\n`);
+      process.exit(1);
+    }
   } else {
-    console.log(` ❌ VERDICT: BOTTLENECK REACHED. High failure rate (${(100 - successRate).toFixed(1)}% errors). Target capacity of ${config.vus} not met.\n`);
-    process.exit(1);
+    const successRate = metrics.totalStreamsAttempted > 0
+      ? (metrics.successfulStreams / metrics.totalStreamsAttempted) * 100
+      : 100;
+    if (successRate >= 98 && metrics.activeStreamers >= config.vus * 0.9) {
+      console.log(` ✅ VERDICT: EXCELLENT PASS! Service successfully sustained ${metrics.activeStreamers} concurrent streamers (${successRate.toFixed(1)}% success rate).\n`);
+      process.exit(0);
+    } else {
+      console.log(` ❌ VERDICT: DEGRADED / BOTTLENECK REACHED.\n`);
+      process.exit(1);
+    }
   }
 }
 

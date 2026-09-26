@@ -5,19 +5,22 @@ export const redis = new Redis({
   host: config.redis.host,
   port: config.redis.port,
   password: config.redis.password,
-  lazyConnect: true,
-  connectTimeout: 500, // Strict 500ms connection timeout to prevent 20s request hangs
-  commandTimeout: 300, // Strict 300ms command execution timeout
-  enableOfflineQueue: false, // Do not queue commands when Redis is offline
-  maxRetriesPerRequest: 1,
+  connectTimeout: 3000,
+  commandTimeout: 2000,
+  enableOfflineQueue: true,
+  maxRetriesPerRequest: 3,
   retryStrategy(times) {
-    if (times > 3) return null;
-    return Math.min(times * 100, 500);
+    if (times > 10) return null;
+    return Math.min(times * 100, 2000);
   },
 });
 
-redis.on('error', (err) => {
-  // Silent fail / log warnings so app doesn't crash if Redis is temporarily unreachable
+redis.on('connect', () => {
+  // Redis connected successfully
+});
+
+redis.on('error', (_) => {
+  // Silent catch
 });
 
 export async function checkRedisConnection(): Promise<boolean> {
