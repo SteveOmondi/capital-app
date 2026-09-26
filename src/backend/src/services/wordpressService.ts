@@ -152,35 +152,27 @@ function transformApiArticle(item: any): ArticleDTO {
 
 /**
  * Syncs posts to PostgreSQL in background for Full-Text Search.
+ * Uses bulk createMany with skipDuplicates for high performance.
  */
 async function syncArticlesToPostgres(articles: ArticleDTO[]): Promise<void> {
+  if (!articles || articles.length === 0) return;
   try {
-    for (const article of articles) {
-      await prisma.article.upsert({
-        where: { id: article.id },
-        update: {
-          title: article.title,
-          slug: article.slug,
-          excerpt: article.excerpt,
-          content: article.content,
-          categorySlug: article.categorySlug,
-          author: article.author,
-          coverImageUrl: article.coverImageUrl,
-          publishedAt: new Date(article.publishedAtTimestamp),
-        },
-        create: {
-          id: article.id,
-          title: article.title,
-          slug: article.slug,
-          excerpt: article.excerpt,
-          content: article.content,
-          categorySlug: article.categorySlug,
-          author: article.author,
-          coverImageUrl: article.coverImageUrl,
-          publishedAt: new Date(article.publishedAtTimestamp),
-        },
-      });
-    }
+    const data = articles.map((article) => ({
+      id: article.id,
+      slug: article.slug,
+      title: article.title,
+      excerpt: article.excerpt || article.title,
+      content: article.content,
+      categorySlug: article.categorySlug,
+      author: article.author || 'Capital Digital',
+      coverImageUrl: article.coverImageUrl || null,
+      publishedAt: new Date(article.publishedAtTimestamp),
+    }));
+
+    await prisma.article.createMany({
+      data,
+      skipDuplicates: true,
+    });
   } catch (error) {
     logger.warn({ error }, 'Background PostgreSQL FTS sync skipped or failed');
   }
@@ -305,8 +297,19 @@ async function fetchFromWordPressApiAndSave(
 
 /**
  * Triggers an asynchronous refetch of content from WordPress API in the background.
+ * Uses a Redis lock (TTL 300s) to prevent concurrent background sync spams.
  */
-function triggerBackgroundWordPressSync(params: FetchArticlesQuery, cacheKey: string): void {
+async function triggerBackgroundWordPressSync(params: FetchArticlesQuery, cacheKey: string): Promise<void> {
+  const lockKey = `sync:lock:news:${params.category || 'all'}:${params.page || 1}`;
+  if (redis.status === 'ready') {
+    try {
+      const acquired = await redis.set(lockKey, '1', 'EX', 300, 'NX');
+      if (!acquired) {
+        return; // Sync already in progress or completed within 5 mins
+      }
+    } catch (_) {}
+  }
+
   setImmediate(() => {
     fetchFromWordPressApiAndSave(params, cacheKey).catch((err) => {
       logger.warn({ err }, 'Background WordPress refetch failed silently');

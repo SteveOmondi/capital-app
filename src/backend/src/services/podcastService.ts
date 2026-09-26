@@ -143,36 +143,25 @@ async function fetchPodcastsFromUpstreamAndSave(
     total = filtered.length;
   }
 
-  // C. Sync fetched episodes to PostgreSQL database
+  // C. Sync fetched episodes to PostgreSQL database via bulk createMany
   try {
     const { prisma } = require('../config/db');
-    for (const ep of episodes) {
-      const epId = Math.abs(hashCode(ep.guid)) || (Date.now() % 2147483647);
-      await prisma.article.upsert({
-        where: { id: epId },
-        update: {
-          title: ep.title,
-          slug: `podcast-${ep.guid}`,
-          excerpt: ep.description,
-          content: ep.description,
-          categorySlug: group || 'podcasts',
-          author: 'Capital FM Podcasts',
-          coverImageUrl: ep.imageUrl,
-          publishedAt: new Date(ep.publishedTimestamp),
-        },
-        create: {
-          id: epId,
-          title: ep.title,
-          slug: `podcast-${ep.guid}`,
-          excerpt: ep.description,
-          content: ep.description,
-          categorySlug: group || 'podcasts',
-          author: 'Capital FM Podcasts',
-          coverImageUrl: ep.imageUrl,
-          publishedAt: new Date(ep.publishedTimestamp),
-        },
-      });
-    }
+    const data = episodes.map((ep, idx) => ({
+      id: Math.abs(hashCode(ep.guid)) || ((Date.now() + idx) % 2147483647),
+      slug: `podcast-${ep.guid}`,
+      title: ep.title,
+      excerpt: ep.description || ep.title,
+      content: ep.description || ep.title,
+      categorySlug: group || 'podcasts',
+      author: 'Capital FM Podcasts',
+      coverImageUrl: ep.imageUrl || DEFAULT_IMAGE_URL,
+      publishedAt: new Date(ep.publishedTimestamp),
+    }));
+
+    await prisma.article.createMany({
+      data,
+      skipDuplicates: true,
+    });
   } catch (_) {}
 
   const result = { episodes, total, page, limit };
@@ -187,8 +176,19 @@ async function fetchPodcastsFromUpstreamAndSave(
 
 /**
  * Triggers background podcast refetch from Atunwa API & RSS feeds.
+ * Uses a Redis lock (TTL 300s) to prevent concurrent background sync spams.
  */
-function triggerBackgroundPodcastSync(query: FetchPodcastEpisodesQuery, cacheKey: string): void {
+async function triggerBackgroundPodcastSync(query: FetchPodcastEpisodesQuery, cacheKey: string): Promise<void> {
+  const lockKey = `sync:lock:podcast:${query.group || 'all'}:${query.page || 1}`;
+  if (redis.status === 'ready') {
+    try {
+      const acquired = await redis.set(lockKey, '1', 'EX', 300, 'NX');
+      if (!acquired) {
+        return; // Sync already in progress or completed within 5 mins
+      }
+    } catch (_) {}
+  }
+
   setImmediate(() => {
     fetchPodcastsFromUpstreamAndSave(query, cacheKey).catch((err) => {
       logger.warn({ err }, 'Background podcast sync failed silently');
