@@ -123,7 +123,7 @@ function transformApiArticle(item: any): ArticleDTO {
   const embeddedAuthor = item._embedded && Array.isArray(item._embedded['author']) ? item._embedded['author'][0] : undefined;
   const authorDetails = parseAuthorDetails(item.author, embeddedAuthor);
   const authorName = authorDetails.name || 'Capital Digital';
-  const pubDateStr = item.published_at || item.publishedAt || item.date || new Date().toISOString();
+  const pubDateStr = item.published_at || item.publishedAt || item.date_gmt || item.date || new Date().toISOString();
   const publishedAtTimestamp = new Date(pubDateStr).getTime() || Date.now();
 
   const categorySlug = item.primary_category?.slug || item.categorySlug || (Array.isArray(item.categories) && item.categories[0]?.slug) || 'news';

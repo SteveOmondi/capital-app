@@ -78,7 +78,7 @@ export async function getPodcastGroups(): Promise<PodcastGroupDTO[]> {
  * Preserves audio.url including StreamGuys analytics parameters (?awCollectionId=...).
  */
 function transformWpEpisode(ep: any): PodcastEpisode {
-  const pubDateStr = ep.published || ep.publishedAt || ep.date || new Date().toISOString();
+  const pubDateStr = ep.published_at || ep.publishedAt || ep.published || ep.date_gmt || ep.date || new Date().toISOString();
   const publishedTimestamp = new Date(pubDateStr).getTime() || Date.now();
 
   const audioUrl = typeof ep.audio === 'object' ? ep.audio?.url || '' : ep.audio || ep.audioUrl || '';
