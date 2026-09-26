@@ -174,7 +174,7 @@ stages:
               SCP_CMD="scp -P $(PROD_SSH_PORT) -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
 
               echo "Ensuring target directory structure exists on $(PROD_SSH_HOST)..."
-              $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "if [ -d /opt/apps/capital-app/nginx/nginx.conf ]; then rm -rf /opt/apps/capital-app/nginx/nginx.conf; fi && mkdir -p /opt/apps/capital-app/scripts /opt/apps/capital-app/nginx"
+              $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "sudo mkdir -p /opt/apps/capital-app/scripts /opt/apps/capital-app/nginx && (sudo rm -rf /opt/apps/capital-app/nginx/nginx.conf 2>/dev/null || rm -rf /opt/apps/capital-app/nginx/nginx.conf) && sudo chown -R $(PROD_SSH_USER): /opt/apps/capital-app"
 
               echo "Copying deployment configuration, NGINX config, and scripts to $(PROD_SSH_HOST)..."
               $SCP_CMD src/backend/docker-compose.prod.yml $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/docker-compose.prod.yml
