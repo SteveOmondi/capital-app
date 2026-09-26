@@ -23,7 +23,8 @@ echo "================================================================="
 mkdir -p "$APP_DIR/data/postgres" "$APP_DIR/data/redis" "$APP_DIR/nginx"
 if [ -d "$APP_DIR/nginx/nginx.conf" ]; then
     echo "Cleaning up erroneous directory mount at $APP_DIR/nginx/nginx.conf..."
-    sudo rm -rf "$APP_DIR/nginx/nginx.conf" 2>/dev/null || rm -rf "$APP_DIR/nginx/nginx.conf"
+    mv "$APP_DIR/nginx" "$APP_DIR/nginx_bak_$(date +%s)" 2>/dev/null || true
+    mkdir -p "$APP_DIR/nginx"
 fi
 cd "$APP_DIR"
 
