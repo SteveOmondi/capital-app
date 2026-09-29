@@ -143,7 +143,7 @@ async function fetchPodcastsFromUpstreamAndSave(
     total = filtered.length;
   }
 
-  // C. Sync fetched episodes to PostgreSQL database via bulk createMany
+  // C. Sync fetched episodes to PostgreSQL database via bulk upsert
   try {
     const { prisma } = require('../config/db');
     const data = episodes.map((ep, idx) => ({
@@ -151,17 +151,21 @@ async function fetchPodcastsFromUpstreamAndSave(
       slug: `podcast-${ep.guid}`,
       title: ep.title,
       excerpt: ep.description || ep.title,
-      content: ep.description || ep.title,
+      content: ep.audioUrl ? `${ep.audioUrl}|||${ep.description || ep.title}` : (ep.description || ep.title),
       categorySlug: group || 'podcasts',
       author: 'Capital FM Podcasts',
       coverImageUrl: ep.imageUrl || DEFAULT_IMAGE_URL,
       publishedAt: new Date(ep.publishedTimestamp),
     }));
 
-    await prisma.article.createMany({
-      data,
-      skipDuplicates: true,
-    });
+    for (const item of data) {
+      const existing = await prisma.article.findUnique({ where: { id: item.id } });
+      if (!existing) {
+        await prisma.article.create({ data: item });
+      } else {
+        await prisma.article.update({ where: { id: item.id }, data: item });
+      }
+    }
   } catch (_) {}
 
   const result = { episodes, total, page, limit };
@@ -257,16 +261,27 @@ export async function getPodcastEpisodes(query: FetchPodcastEpisodesQuery = {}):
     ]);
 
     if (total > 0) {
-      const episodes: PodcastEpisode[] = items.map((item: any) => ({
-        guid: item.slug.replace(/^podcast-/, ''),
-        title: item.title,
-        description: item.excerpt || item.title,
-        audioUrl: '',
-        duration: '45:00',
-        publishedAt: item.publishedAt.toISOString(),
-        publishedTimestamp: item.publishedAt.getTime(),
-        imageUrl: item.coverImageUrl || DEFAULT_IMAGE_URL,
-      }));
+      const episodes: PodcastEpisode[] = items.map((item: any) => {
+        let audioUrl = '';
+        let description = item.excerpt || item.title;
+
+        if (item.content && item.content.includes('|||')) {
+          const parts = item.content.split('|||');
+          audioUrl = parts[0] || '';
+          description = parts.slice(1).join('|||') || description;
+        }
+
+        return {
+          guid: item.slug.replace(/^podcast-/, ''),
+          title: item.title,
+          description,
+          audioUrl,
+          duration: '45:00',
+          publishedAt: item.publishedAt.toISOString(),
+          publishedTimestamp: item.publishedAt.getTime(),
+          imageUrl: item.coverImageUrl || DEFAULT_IMAGE_URL,
+        };
+      });
 
       const result = { episodes, total, page, limit };
 

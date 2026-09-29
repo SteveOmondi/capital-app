@@ -46,4 +46,20 @@ describe('News API Integration Tests', () => {
     expect(response.body).toHaveProperty('status', 'success');
     expect(response.body.data).toHaveProperty('articles');
   }, 15000);
+
+  it('GET /api/v1/news/:idOrSlug should return full article detail without content truncation', async () => {
+    // First query list to populate DB cache
+    const listRes = await request(app).get('/api/v1/news?page=1&limit=5');
+    if (listRes.body.data?.articles?.length > 0) {
+      const sampleArticle = listRes.body.data.articles[0];
+
+      const detailRes = await request(app).get(`/api/v1/news/${sampleArticle.slug}`);
+      expect(detailRes.status).toBe(200);
+      expect(detailRes.body).toHaveProperty('status', 'success');
+      expect(detailRes.body.data).toHaveProperty('content');
+      expect(typeof detailRes.body.data.content).toBe('string');
+      expect(detailRes.body.data.content.length).toBeGreaterThan(0);
+    }
+  }, 15000);
 });
+

@@ -113,7 +113,9 @@ function transformApiArticle(item: any): ArticleDTO {
   const rawContent = typeof item.content === 'object' ? item.content?.html || item.content?.rendered || '' : item.content || '';
 
   const excerpt = stripHtml(rawExcerpt);
-  const content = typeof item.content === 'object' && item.content?.html ? item.content.html : stripHtml(rawContent);
+  const content = typeof item.content === 'object'
+    ? item.content?.html || item.content?.rendered || rawContent
+    : (rawContent || excerpt);
 
   let coverImageUrl: string | undefined = item.image?.url || item.coverImageUrl;
   if (!coverImageUrl && item._embedded && item._embedded['wp:featuredmedia']?.[0]?.source_url) {
@@ -151,28 +153,45 @@ function transformApiArticle(item: any): ArticleDTO {
 }
 
 /**
- * Syncs posts to PostgreSQL in background for Full-Text Search.
- * Uses bulk createMany with skipDuplicates for high performance.
+ * Syncs posts to PostgreSQL in background for Full-Text Search and local caching.
+ * Updates existing entries if new content is fuller/longer, avoiding downgrading full articles to list summaries.
  */
-async function syncArticlesToPostgres(articles: ArticleDTO[]): Promise<void> {
+async function syncArticlesToPostgres(articles: ArticleDTO[], isFullContent: boolean = false): Promise<void> {
   if (!articles || articles.length === 0) return;
   try {
-    const data = articles.map((article) => ({
-      id: article.id,
-      slug: article.slug,
-      title: article.title,
-      excerpt: article.excerpt || article.title,
-      content: article.content,
-      categorySlug: article.categorySlug,
-      author: article.author || 'Capital Digital',
-      coverImageUrl: article.coverImageUrl || null,
-      publishedAt: new Date(article.publishedAtTimestamp),
-    }));
+    for (const article of articles) {
+      const data = {
+        id: article.id,
+        slug: article.slug,
+        title: article.title,
+        excerpt: article.excerpt || article.title,
+        content: article.content,
+        categorySlug: article.categorySlug,
+        author: article.author || 'Capital Digital',
+        coverImageUrl: article.coverImageUrl || null,
+        publishedAt: new Date(article.publishedAtTimestamp),
+      };
 
-    await prisma.article.createMany({
-      data,
-      skipDuplicates: true,
-    });
+      const existing = await prisma.article.findUnique({
+        where: { id: article.id },
+      });
+
+      if (!existing) {
+        await prisma.article.create({ data });
+      } else {
+        const existingContentLen = existing.content?.length || 0;
+        const incomingContentLen = article.content?.length || 0;
+        const shouldUpdateContent = isFullContent || incomingContentLen >= existingContentLen;
+
+        await prisma.article.update({
+          where: { id: article.id },
+          data: {
+            ...data,
+            content: shouldUpdateContent ? article.content : existing.content,
+          },
+        });
+      }
+    }
   } catch (error) {
     logger.warn({ error }, 'Background PostgreSQL FTS sync skipped or failed');
   }
@@ -289,7 +308,7 @@ async function fetchFromWordPressApiAndSave(
   });
 
   // Sync to PostgreSQL DB
-  await syncArticlesToPostgres(articles);
+  await syncArticlesToPostgres(articles, fields === 'full');
 
   const result = { articles, total: total || articles.length, page, limit };
 
@@ -465,14 +484,14 @@ export async function getTrendingArticles(days: number = 7, category?: string): 
 function triggerBackgroundArticleSync(idOrSlug: string, cacheKey: string): void {
   setImmediate(async () => {
     try {
-      const url = `${config.services.capitalFmApiBaseUrl}/articles/${encodeURIComponent(idOrSlug)}`;
+      const url = `${config.services.capitalFmApiBaseUrl}/articles/${encodeURIComponent(idOrSlug)}?fields=full`;
       const response = await fetch(url);
       if (response.ok) {
         const json = (await response.json()) as any;
         const rawData = json.data || json;
         const article = transformApiArticle(rawData);
         if (article) {
-          await syncArticlesToPostgres([article]);
+          await syncArticlesToPostgres([article], true);
           if (redis.status === 'ready') {
             await redis.setex(cacheKey, 900, JSON.stringify(article)).catch(() => {});
           }
@@ -487,7 +506,7 @@ function triggerBackgroundArticleSync(idOrSlug: string, cacheKey: string): void 
 /**
  * Fetches single article by ID or Slug (/articles/{id-or-slug}) with 3-tier fallback:
  * 1. Return Redis Cache (if present) + trigger background WP refetch
- * 2. Return PostgreSQL DB (if present) + update Redis with refreshed TTL + trigger background WP refetch
+ * 2. Return PostgreSQL DB (if present and holds full content) + update Redis with refreshed TTL + trigger background WP refetch
  * 3. Fetch from WordPress API + update Postgres & Redis with refreshed TTL
  */
 export async function getArticleBySlug(idOrSlug: string): Promise<ArticleDTO | null> {
@@ -515,35 +534,41 @@ export async function getArticleBySlug(idOrSlug: string): Promise<ArticleDTO | n
     });
 
     if (dbArticle) {
-      const article: ArticleDTO = {
-        id: dbArticle.id,
-        slug: dbArticle.slug,
-        title: dbArticle.title,
-        excerpt: dbArticle.excerpt || dbArticle.title,
-        content: dbArticle.content,
-        categorySlug: dbArticle.categorySlug,
-        author: dbArticle.author || 'Capital Digital',
-        coverImageUrl: dbArticle.coverImageUrl || undefined,
-        publishedAt: dbArticle.publishedAt.toISOString(),
-        publishedAtTimestamp: dbArticle.publishedAt.getTime(),
-      };
+      const isLikelyFullContent =
+        dbArticle.content &&
+        dbArticle.content.length > (dbArticle.excerpt?.length || 0) + 30;
 
-      // Update Redis content and reset TTL to 900s (15 mins)
-      if (redis.status === 'ready') {
-        redis.setex(cacheKey, 900, JSON.stringify(article)).catch(() => {});
+      if (isLikelyFullContent) {
+        const article: ArticleDTO = {
+          id: dbArticle.id,
+          slug: dbArticle.slug,
+          title: dbArticle.title,
+          excerpt: dbArticle.excerpt || dbArticle.title,
+          content: dbArticle.content,
+          categorySlug: dbArticle.categorySlug,
+          author: dbArticle.author || 'Capital Digital',
+          coverImageUrl: dbArticle.coverImageUrl || undefined,
+          publishedAt: dbArticle.publishedAt.toISOString(),
+          publishedAtTimestamp: dbArticle.publishedAt.getTime(),
+        };
+
+        // Update Redis content and reset TTL to 900s (15 mins)
+        if (redis.status === 'ready') {
+          redis.setex(cacheKey, 900, JSON.stringify(article)).catch(() => {});
+        }
+
+        // Trigger background refetch from WordPress
+        triggerBackgroundArticleSync(idOrSlug, cacheKey);
+
+        return article;
       }
-
-      // Trigger background refetch from WordPress
-      triggerBackgroundArticleSync(idOrSlug, cacheKey);
-
-      return article;
     }
   } catch (dbErr) {
     logger.warn({ dbErr, idOrSlug }, 'PostgreSQL article lookup skipped or failed');
   }
 
-  // 3. Fallback: Query WordPress API synchronously if neither Redis nor DB has data
-  const url = `${config.services.capitalFmApiBaseUrl}/articles/${encodeURIComponent(idOrSlug)}`;
+  // 3. Fallback: Query WordPress API synchronously if neither Redis nor DB has full data
+  const url = `${config.services.capitalFmApiBaseUrl}/articles/${encodeURIComponent(idOrSlug)}?fields=full`;
 
   try {
     const response = await fetch(url);
@@ -560,7 +585,7 @@ export async function getArticleBySlug(idOrSlug: string): Promise<ArticleDTO | n
     const article = transformApiArticle(rawData);
 
     if (article) {
-      await syncArticlesToPostgres([article]);
+      await syncArticlesToPostgres([article], true);
       if (redis.status === 'ready') {
         redis.setex(cacheKey, 900, JSON.stringify(article)).catch(() => {});
       }
@@ -572,3 +597,4 @@ export async function getArticleBySlug(idOrSlug: string): Promise<ArticleDTO | n
     return null;
   }
 }
+
