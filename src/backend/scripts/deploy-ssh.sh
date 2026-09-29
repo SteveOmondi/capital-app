@@ -11,12 +11,14 @@ DOCKER_IMAGE="${DOCKER_IMAGE:-jimane254/capital-app}"
 DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-latest}"
 DEPLOY_CONTAINERIZED_DB="${DEPLOY_CONTAINERIZED_DB:-true}"
 DEPLOY_CONTAINERIZED_REDIS="${DEPLOY_CONTAINERIZED_REDIS:-true}"
+CLEAR_CACHE_ON_DEPLOY="${CLEAR_CACHE_ON_DEPLOY:-false}"
 
 echo "================================================================="
 echo " Starting Capital FM Production Deployment"
 echo " Target Directory: $APP_DIR"
 echo " Image: $DOCKER_IMAGE:$DOCKER_IMAGE_TAG"
 echo " Containerized DB: $DEPLOY_CONTAINERIZED_DB | Containerized Redis: $DEPLOY_CONTAINERIZED_REDIS"
+echo " Clear Cache On Deploy: $CLEAR_CACHE_ON_DEPLOY"
 echo "================================================================="
 
 # 1. Ensure required infrastructure directory structure exists
@@ -66,6 +68,18 @@ else
         TRIGGER_ROLLBACK=true
     else
         echo "Prisma schema successfully synchronized via db push."
+    fi
+fi
+
+# 5.5. Purge PostgreSQL & Redis cache if CLEAR_CACHE_ON_DEPLOY flag is enabled
+if [ "$CLEAR_CACHE_ON_DEPLOY" = "true" ] && [ "$TRIGGER_ROLLBACK" != "true" ]; then
+    echo "================================================================="
+    echo " CLEAR_CACHE_ON_DEPLOY is true. Purging PostgreSQL and Redis cache..."
+    echo "================================================================="
+    if docker compose -f "$APP_DIR/docker-compose.prod.yml" exec -T backend_1 npm run cache:clear; then
+        echo "Cache clear completed successfully."
+    else
+        echo "WARNING: Cache clear command returned warnings or non-zero exit code."
     fi
 fi
 

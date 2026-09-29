@@ -222,6 +222,7 @@ stages:
                  DOCKER_IMAGE_TAG=$(Build.BuildId) \
                  DEPLOY_CONTAINERIZED_DB=$(DEPLOY_CONTAINERIZED_DB) \
                  DEPLOY_CONTAINERIZED_REDIS=$(DEPLOY_CONTAINERIZED_REDIS) \
+                 CLEAR_CACHE_ON_DEPLOY=$(CLEAR_CACHE_ON_DEPLOY) \
                  /opt/apps/capital-app/scripts/deploy-ssh.sh"
             displayName: 'Execute SSH Deployment, Healthchecks & Rollback'
 
