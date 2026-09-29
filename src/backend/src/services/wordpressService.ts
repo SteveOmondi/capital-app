@@ -264,7 +264,7 @@ async function fetchFromWordPressApiAndSave(
   const limit = Math.min(50, Math.max(1, params.limit || 10));
   const category = params.category || 'all';
   const search = params.search?.trim();
-  const fields = params.fields || 'summary';
+  const fields = params.fields || 'full';
 
   const queryParams = new URLSearchParams();
   queryParams.set('page', String(page));
@@ -353,7 +353,7 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
   const limit = Math.min(50, Math.max(1, params.limit || 10));
   const category = params.category || 'all';
   const search = params.search?.trim();
-  const fields = params.fields || 'summary';
+  const fields = params.fields || 'full';
 
   const cacheKey = `articles:${category}:page:${page}:limit:${limit}:${fields}:${search || ''}`;
 
