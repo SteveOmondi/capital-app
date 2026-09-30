@@ -182,20 +182,27 @@ stages:
               $SCP_CMD src/backend/scripts/deploy-ssh.sh $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/scripts/deploy-ssh.sh
               $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "chmod +x /opt/apps/capital-app/scripts/deploy-ssh.sh"
 
+              echo "Generating dynamic secure passwords for Redis and PostgreSQL..."
+              DYNAMIC_REDIS_PASS="${REDIS_PASSWORD:-$(openssl rand -hex 16)}"
+              DYNAMIC_POSTGRES_PASS="${POSTGRES_PASSWORD:-$(openssl rand -hex 16)}"
+              POSTGRES_USER_VAL="${POSTGRES_USER:-postgres}"
+              POSTGRES_DB_VAL="${POSTGRES_DB:-capitalfm_db}"
+              DYNAMIC_DATABASE_URL="postgresql://${POSTGRES_USER_VAL}:${DYNAMIC_POSTGRES_PASS}@postgres:5432/${POSTGRES_DB_VAL}?schema=public"
+
               echo "Generating runtime .env file safely on pipeline agent..."
-              sed -e 's/^[ \t]*//' << 'EOF' > /tmp/runtime.env
+              sed -e 's/^[ \t]*//' << EOF > /tmp/runtime.env
               NODE_ENV=production
               PORT=3000
               LOG_LEVEL=info
               PUBLIC_BASE_URL=https://api.datalait.co.ke
               DISABLE_RATE_LIMIT=true
-              POSTGRES_USER=$(POSTGRES_USER)
-              POSTGRES_PASSWORD=$(POSTGRES_PASSWORD)
-              POSTGRES_DB=$(POSTGRES_DB)
-              DATABASE_URL=$(DATABASE_URL)
-              REDIS_HOST=$(REDIS_HOST)
-              REDIS_PORT=$(REDIS_PORT)
-              REDIS_PASSWORD=$(REDIS_PASSWORD)
+              POSTGRES_USER=${POSTGRES_USER_VAL}
+              POSTGRES_PASSWORD=${DYNAMIC_POSTGRES_PASS}
+              POSTGRES_DB=${POSTGRES_DB_VAL}
+              DATABASE_URL=${DYNAMIC_DATABASE_URL}
+              REDIS_HOST=redis
+              REDIS_PORT=6379
+              REDIS_PASSWORD=${DYNAMIC_REDIS_PASS}
               WP_WEBHOOK_SECRET=$(WP_WEBHOOK_SECRET)
               WP_CMS_BASE_URL=$(WP_CMS_BASE_URL)
               PODCAST_RSS_URL=$(PODCAST_RSS_URL)
