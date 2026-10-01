@@ -59,7 +59,7 @@ npm run loadtest:mixed
 ```
 *Customizing parameters:*
 ```bash
-npx ts-node scripts/loadtest.ts --target=https://api.datalait.co.ke --mode=mixed --vus=500 --duration=60
+npx ts-node scripts/loadtest.ts --target=https://api.capitalfm.africa --mode=mixed --vus=500 --duration=60
 ```
 
 ##### 3. CLI Options Matrix
@@ -90,7 +90,7 @@ k6 run scripts/k6-loadtest.js -e TARGET_URL=http://localhost:3000
 We have integrated load testing into Azure DevOps in two ways:
 
 ### 1. Automated Post-Deployment Stage (`azure-pipelines.yml`)
-Every push to production automatically triggers Stage 4 (**Post-Deploy Streaming Load Test**), running 200 concurrent streamer Virtual Users against `https://api.datalait.co.ke` to verify performance immediately after deployment.
+Every push to production automatically triggers Stage 4 (**Post-Deploy Streaming Load Test**), running 200 concurrent streamer Virtual Users against `https://api.capitalfm.africa` to verify performance immediately after deployment.
 
 ### 2. Dedicated On-Demand Pipeline (`azure-pipelines-loadtest.yml`)
 To run manual or scheduled load tests in Azure DevOps:

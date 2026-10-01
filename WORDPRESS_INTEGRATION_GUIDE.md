@@ -9,7 +9,7 @@ This guide provides technical specifications, JSON payload contracts, and ready-
 
 ## 🌐 API Gateway Base URLs
 
-- **Production URL**: `https://api.datalait.co.ke/` (or `https://ca-capital-backend-api.salmonwave-7494888b.eastus.azurecontainerapps.io/`)
+- **Production Primary URL**: `https://api.capitalfm.africa/` (Backup: `https://api.datalait.co.ke/`)
 - **Development URL**: `http://localhost:3000`
 
 ---
@@ -108,7 +108,7 @@ Add this code to your WordPress theme's `functions.php` or a custom plugin (e.g.
 
 if (!defined('ABSPATH')) exit;
 
-define('CAPITAL_BACKEND_URL', 'https://api.datalait.co.ke/');
+define('CAPITAL_BACKEND_URL', 'https://api.capitalfm.africa/');
 define('CAPITAL_WEBHOOK_SECRET', 'capital_fm_secret_webhook_key_2026');
 
 /**

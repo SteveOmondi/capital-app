@@ -10,7 +10,7 @@ pool:
 variables:
   - group: capital-app-vg # Azure DevOps Library Variable Group
   - name: TARGET_URL
-    value: 'https://api.datalait.co.ke'
+    value: 'https://api.capitalfm.africa'
   - name: VUS
     value: '250' # Target Virtual Streamers
   - name: DURATION

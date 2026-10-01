@@ -85,7 +85,8 @@ async function runHopTracing() {
   console.log('===============================================================');
 
   const hopsToTest = [
-    { name: 'Hop 1: Gateway Ingress (api.datalait.co.ke)', url: 'https://api.datalait.co.ke/health' },
+    { name: 'Hop 1a: Primary Gateway Ingress (api.capitalfm.africa)', url: 'https://api.capitalfm.africa/health' },
+    { name: 'Hop 1b: Backup Gateway Ingress (api.datalait.co.ke)', url: 'https://api.datalait.co.ke/health' },
     { name: 'Hop 2: Upstream WordPress CMS API (capitalfm.africa)', url: 'https://capitalfm.africa/wp-json/capitalfm/v1/articles?per_page=5' },
     { name: 'Hop 3: StreamGuys Recast OAuth API', url: 'https://atunwadigital-recast.streamguys1.com/login' },
     { name: 'Hop 4: iTunes Artwork Enrichment API', url: 'https://itunes.apple.com/search?term=Capital+FM&limit=1' },

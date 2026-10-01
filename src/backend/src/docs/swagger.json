@@ -11,8 +11,12 @@
   },
   "servers": [
     {
+      "url": "https://api.capitalfm.africa",
+      "description": "Primary Production Gateway (api.capitalfm.africa)"
+    },
+    {
       "url": "https://api.datalait.co.ke",
-      "description": "Primary Production Gateway (api.datalait.co.ke)"
+      "description": "Backup Failover Gateway (api.datalait.co.ke)"
     },
     {
       "url": "https://api-cpapp.aialabs.co.ke",

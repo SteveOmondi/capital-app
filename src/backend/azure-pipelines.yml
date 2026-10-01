@@ -194,7 +194,8 @@ stages:
               NODE_ENV=production
               PORT=3000
               LOG_LEVEL=info
-              PUBLIC_BASE_URL=https://api.datalait.co.ke
+              PUBLIC_BASE_URL=https://api.capitalfm.africa
+              BACKUP_BASE_URL=https://api.datalait.co.ke
               DISABLE_RATE_LIMIT=true
               POSTGRES_USER=${POSTGRES_USER_VAL}
               POSTGRES_PASSWORD=${DYNAMIC_POSTGRES_PASS}

@@ -17,7 +17,7 @@ interface EndpointBenchmarkResult {
   contentLengthBytes: number;
 }
 
-const TARGET_HOST = process.env.TARGET_URL || 'https://api.datalait.co.ke';
+const TARGET_HOST = process.env.TARGET_URL || 'https://api.capitalfm.africa';
 const SAMPLE_COUNT = 5; // Number of warm requests per endpoint to calculate averages
 
 const ENDPOINTS_TO_TEST = [

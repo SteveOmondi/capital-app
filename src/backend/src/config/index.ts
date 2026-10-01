@@ -15,7 +15,8 @@ export const config = {
   env: process.env.NODE_ENV || 'development',
   logLevel: process.env.LOG_LEVEL || 'info',
   corsOrigin: process.env.CORS_ORIGIN || '*',
-  publicBaseUrl: process.env.PUBLIC_BASE_URL || 'https://api.datalait.co.ke',
+  publicBaseUrl: process.env.PUBLIC_BASE_URL || 'https://api.capitalfm.africa',
+  backupBaseUrl: process.env.BACKUP_BASE_URL || 'https://api.datalait.co.ke',
 
   db: {
     url: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/capitalfm_db?schema=public',

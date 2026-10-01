@@ -6,9 +6,10 @@ This document provides complete API contracts, endpoint specifications, JSON DTO
 
 ## 🌐 API Gateway Base URLs
 
-- **Production Gateway URL**: `api.datalait.co.ke` (or `https://api.datalait.co.ke`)
+- **Production Primary Gateway URL**: `api.capitalfm.africa` (or `https://api.capitalfm.africa`)
+- **Production Backup Gateway URL**: `api.datalait.co.ke` (or `https://api.datalait.co.ke`)
 - **Local Dev Gateway URL**: `http://localhost:3000` *(Use `http://10.0.2.2:3000` for Android Emulator)*
-- **Interactive Swagger Documentation**: `https://api.datalait.co.ke/docs`
+- **Interactive Swagger Documentation**: `https://api.capitalfm.africa/docs` (or `https://api.datalait.co.ke/docs`)
 
 ---
 
@@ -265,7 +266,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class CapitalApiClient {
-  static const String baseUrl = 'https://api.datalait.co.ke';
+  static const String baseUrl = 'https://api.capitalfm.africa'; // Backup: https://api.datalait.co.ke
 
   /// Fetch News Categories
   Future<List<dynamic>> fetchCategories() async {

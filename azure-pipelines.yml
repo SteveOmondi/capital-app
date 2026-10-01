@@ -187,7 +187,8 @@ stages:
               NODE_ENV=production
               PORT=3000
               LOG_LEVEL=info
-              PUBLIC_BASE_URL=https://api.datalait.co.ke
+              PUBLIC_BASE_URL=https://api.capitalfm.africa
+              BACKUP_BASE_URL=https://api.datalait.co.ke
               DISABLE_RATE_LIMIT=true
               POSTGRES_USER=$(POSTGRES_USER)
               POSTGRES_PASSWORD=$(POSTGRES_PASSWORD)
@@ -249,7 +250,7 @@ stages:
 
           - script: |
               cd src/backend
-              npx ts-node scripts/loadtest.ts --target=https://api.datalait.co.ke --mode=mixed --vus=200 --duration=30 --ramp=5
+              npx ts-node scripts/loadtest.ts --target=https://api.capitalfm.africa --mode=mixed --vus=200 --duration=30 --ramp=5
             env:
               DISABLE_RATE_LIMIT: 'true'
             displayName: 'Execute Automated Streaming Load Test'
