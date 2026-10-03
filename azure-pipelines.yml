@@ -170,8 +170,8 @@ stages:
           - script: |
               set -e
               chmod 600 $(sshKey.secureFilePath)
-              SSH_CMD="ssh -p $(PROD_SSH_PORT) -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
-              SCP_CMD="scp -P $(PROD_SSH_PORT) -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
+              SSH_CMD="ssh -p $(PROD_SSH_PORT) -o ConnectTimeout=15 -o ServerAliveInterval=5 -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
+              SCP_CMD="scp -P $(PROD_SSH_PORT) -o ConnectTimeout=15 -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
 
               echo "Ensuring target directory structure exists on $(PROD_SSH_HOST)..."
               $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "if [ -d /opt/apps/capital-app/nginx/nginx.conf ]; then mv /opt/apps/capital-app/nginx /opt/apps/capital-app/nginx_bak_\$(date +%s) 2>/dev/null || true; fi && mkdir -p /opt/apps/capital-app/scripts /opt/apps/capital-app/nginx && rm -f /opt/apps/capital-app/nginx/nginx.conf"

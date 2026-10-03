@@ -50,21 +50,30 @@ if [ "$DEPLOY_CONTAINERIZED_REDIS" = "true" ]; then
     PROFILES="$PROFILES --profile container-redis"
 fi
 
-# Synchronize PostgreSQL internal password if container is already running
-if [ "$DEPLOY_CONTAINERIZED_DB" = "true" ] && docker ps --format '{{.Names}}' | grep -q "^capital_fm_postgres$"; then
-    source "$APP_DIR/.env" 2>/dev/null || true
-    if [ -n "$POSTGRES_USER" ] && [ -n "$POSTGRES_PASSWORD" ]; then
-        echo "Updating PostgreSQL authentication password inside existing container instance..."
-        docker exec -i capital_fm_postgres psql -U "$POSTGRES_USER" -d "${POSTGRES_DB:-capitalfm_db}" -c "ALTER USER \"$POSTGRES_USER\" WITH PASSWORD '$POSTGRES_PASSWORD';" 2>/dev/null || true
-    fi
-fi
-
 # Export image tag for docker-compose.prod.yml
 export DOCKER_IMAGE
 export DOCKER_IMAGE_TAG
 
 echo "Launching 3 backend API instances + NGINX round-robin load balancer via Docker Compose..."
 docker compose $PROFILES -f "$APP_DIR/docker-compose.prod.yml" up -d --remove-orphans
+
+# Ensure PostgreSQL container is ready and user authentication credentials match .env
+if [ "$DEPLOY_CONTAINERIZED_DB" = "true" ]; then
+    source "$APP_DIR/.env" 2>/dev/null || true
+    echo "Waiting for PostgreSQL database container to be ready..."
+    MAX_DB_RETRIES=15
+    DB_RETRY=0
+    until docker exec capital_fm_postgres pg_isready -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-capitalfm_db}" 2>/dev/null || [ $DB_RETRY -eq $MAX_DB_RETRIES ]; do
+        DB_RETRY=$((DB_RETRY + 1))
+        echo "Waiting for PostgreSQL database connection... ($DB_RETRY/$MAX_DB_RETRIES)"
+        sleep 2
+    done
+
+    if [ -n "$POSTGRES_USER" ] && [ -n "$POSTGRES_PASSWORD" ]; then
+        echo "Synchronizing PostgreSQL user password inside database container..."
+        docker exec -u postgres capital_fm_postgres psql -U postgres -d "${POSTGRES_DB:-capitalfm_db}" -c "ALTER USER \"$POSTGRES_USER\" WITH PASSWORD '$POSTGRES_PASSWORD';" 2>/dev/null || true
+    fi
+fi
 
 # 5. Run Prisma Database Migrations / Schema Sync inside container
 echo "Executing Prisma database schema synchronization..."

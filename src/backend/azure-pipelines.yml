@@ -170,8 +170,8 @@ stages:
           - script: |
               set -e
               chmod 600 $(sshKey.secureFilePath)
-              SSH_CMD="ssh -p $(PROD_SSH_PORT) -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
-              SCP_CMD="scp -P $(PROD_SSH_PORT) -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
+              SSH_CMD="ssh -p $(PROD_SSH_PORT) -o ConnectTimeout=15 -o ServerAliveInterval=5 -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
+              SCP_CMD="scp -P $(PROD_SSH_PORT) -o ConnectTimeout=15 -o StrictHostKeyChecking=no -i $(sshKey.secureFilePath)"
 
               echo "Ensuring target directory structure exists on $(PROD_SSH_HOST)..."
               $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "if [ -d /opt/apps/capital-app/nginx/nginx.conf ]; then mv /opt/apps/capital-app/nginx /opt/apps/capital-app/nginx_bak_\$(date +%s) 2>/dev/null || true; fi && mkdir -p /opt/apps/capital-app/scripts /opt/apps/capital-app/nginx && rm -f /opt/apps/capital-app/nginx/nginx.conf"
@@ -182,11 +182,16 @@ stages:
               $SCP_CMD src/backend/scripts/deploy-ssh.sh $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/scripts/deploy-ssh.sh
               $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "chmod +x /opt/apps/capital-app/scripts/deploy-ssh.sh"
 
-              echo "Generating dynamic secure passwords for Redis and PostgreSQL..."
-              DYNAMIC_REDIS_PASS="${REDIS_PASSWORD:-$(openssl rand -hex 16)}"
-              DYNAMIC_POSTGRES_PASS="${POSTGRES_PASSWORD:-$(openssl rand -hex 16)}"
-              POSTGRES_USER_VAL="${POSTGRES_USER:-postgres}"
-              POSTGRES_DB_VAL="${POSTGRES_DB:-capitalfm_db}"
+              echo "Inspecting target host for existing PostgreSQL and Redis credentials..."
+              EXISTING_POSTGRES_PASS=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^POSTGRES_PASSWORD=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2-" || true)
+              EXISTING_REDIS_PASS=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^REDIS_PASSWORD=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2-" || true)
+              EXISTING_POSTGRES_USER=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^POSTGRES_USER=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2-" || true)
+              EXISTING_POSTGRES_DB=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^POSTGRES_DB=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2-" || true)
+
+              POSTGRES_USER_VAL="${POSTGRES_USER:-${EXISTING_POSTGRES_USER:-postgres}}"
+              POSTGRES_DB_VAL="${POSTGRES_DB:-${EXISTING_POSTGRES_DB:-capitalfm_db}}"
+              DYNAMIC_POSTGRES_PASS="${POSTGRES_PASSWORD:-${EXISTING_POSTGRES_PASS:-$(openssl rand -hex 16)}}"
+              DYNAMIC_REDIS_PASS="${REDIS_PASSWORD:-${EXISTING_REDIS_PASS:-$(openssl rand -hex 16)}}"
               DYNAMIC_DATABASE_URL="postgresql://${POSTGRES_USER_VAL}:${DYNAMIC_POSTGRES_PASS}@postgres:5432/${POSTGRES_DB_VAL}?schema=public"
 
               echo "Generating runtime .env file safely on pipeline agent..."
