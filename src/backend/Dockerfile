@@ -29,6 +29,11 @@ RUN npx prisma generate
 
 COPY --from=builder /app/dist ./dist
 
+# Harden security: Change ownership and execute as unprivileged non-root user
+RUN chown -R node:node /app
+USER node
+
 EXPOSE 3000
 
 CMD ["node", "dist/server.js"]
+

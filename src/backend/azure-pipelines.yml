@@ -228,6 +228,7 @@ stages:
               EOF
 
               $SCP_CMD /tmp/runtime.env $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/.env
+              $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "chmod 600 /opt/apps/capital-app/.env"
 
               echo "Triggering remote deployment and healthcheck verification..."
               $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) \
