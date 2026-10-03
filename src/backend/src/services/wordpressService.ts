@@ -320,17 +320,28 @@ async function fetchFromWordPressApiAndSave(
   return result;
 }
 
+// Global in-memory sync throttling: 3 minutes (180,000 ms)
+let lastWordPressSyncTimestamp = 0;
+const WP_SYNC_INTERVAL_MS = 3 * 60 * 1000;
+
 /**
  * Triggers an asynchronous refetch of content from WordPress API in the background.
- * Uses a Redis lock (TTL 300s) to prevent concurrent background sync spams.
+ * Throttled to execute at most ONCE every 3 minutes to optimize CPU & database resources.
  */
 async function triggerBackgroundWordPressSync(params: FetchArticlesQuery, cacheKey: string): Promise<void> {
+  const now = Date.now();
+  if (now - lastWordPressSyncTimestamp < WP_SYNC_INTERVAL_MS) {
+    return; // Less than 3 minutes since last sync; serve cached/DB data cleanly
+  }
+
+  lastWordPressSyncTimestamp = now;
+
   const lockKey = `sync:lock:news:${params.category || 'all'}:${params.page || 1}`;
   if (redis.status === 'ready') {
     try {
-      const acquired = await redis.set(lockKey, '1', 'EX', 300, 'NX');
+      const acquired = await redis.set(lockKey, '1', 'EX', 180, 'NX');
       if (!acquired) {
-        return; // Sync already in progress or completed within 5 mins
+        return;
       }
     } catch (_) {}
   }
@@ -341,6 +352,7 @@ async function triggerBackgroundWordPressSync(params: FetchArticlesQuery, cacheK
     });
   });
 }
+
 
 /**
  * Fetches articles collection with 3-tier fallback & background revalidation:
@@ -478,10 +490,24 @@ export async function getTrendingArticles(days: number = 7, category?: string): 
   }
 }
 
+const articleSyncTimestamps = new Map<string, number>();
+
 /**
  * Triggers an asynchronous refetch of single article from WordPress API in the background.
+ * Throttled per article to once every 3 minutes.
  */
 function triggerBackgroundArticleSync(idOrSlug: string, cacheKey: string): void {
+  const now = Date.now();
+  const lastSync = articleSyncTimestamps.get(idOrSlug) || 0;
+  if (now - lastSync < WP_SYNC_INTERVAL_MS) {
+    return;
+  }
+
+  articleSyncTimestamps.set(idOrSlug, now);
+  if (articleSyncTimestamps.size > 500) {
+    articleSyncTimestamps.clear();
+  }
+
   setImmediate(async () => {
     try {
       const url = `${config.services.capitalFmApiBaseUrl}/articles/${encodeURIComponent(idOrSlug)}?fields=full`;
@@ -502,6 +528,7 @@ function triggerBackgroundArticleSync(idOrSlug: string, cacheKey: string): void 
     }
   });
 }
+
 
 /**
  * Fetches single article by ID or Slug (/articles/{id-or-slug}) with 3-tier fallback:

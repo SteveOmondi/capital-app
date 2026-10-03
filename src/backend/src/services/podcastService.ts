@@ -178,17 +178,27 @@ async function fetchPodcastsFromUpstreamAndSave(
   return result;
 }
 
+let lastPodcastSyncTimestamp = 0;
+const PODCAST_SYNC_INTERVAL_MS = 3 * 60 * 1000;
+
 /**
  * Triggers background podcast refetch from Atunwa API & RSS feeds.
- * Uses a Redis lock (TTL 300s) to prevent concurrent background sync spams.
+ * Throttled to execute at most ONCE every 3 minutes to optimize CPU & database resources.
  */
 async function triggerBackgroundPodcastSync(query: FetchPodcastEpisodesQuery, cacheKey: string): Promise<void> {
+  const now = Date.now();
+  if (now - lastPodcastSyncTimestamp < PODCAST_SYNC_INTERVAL_MS) {
+    return; // Less than 3 minutes since last podcast sync
+  }
+
+  lastPodcastSyncTimestamp = now;
+
   const lockKey = `sync:lock:podcast:${query.group || 'all'}:${query.page || 1}`;
   if (redis.status === 'ready') {
     try {
-      const acquired = await redis.set(lockKey, '1', 'EX', 300, 'NX');
+      const acquired = await redis.set(lockKey, '1', 'EX', 180, 'NX');
       if (!acquired) {
-        return; // Sync already in progress or completed within 5 mins
+        return;
       }
     } catch (_) {}
   }
@@ -199,6 +209,7 @@ async function triggerBackgroundPodcastSync(query: FetchPodcastEpisodesQuery, ca
     });
   });
 }
+
 
 function hashCode(str: string): number {
   let hash = 0;
