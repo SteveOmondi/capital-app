@@ -183,10 +183,10 @@ stages:
               $SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "chmod +x /opt/apps/capital-app/scripts/deploy-ssh.sh"
 
               echo "Inspecting target host for existing PostgreSQL and Redis credentials..."
-              EXISTING_POSTGRES_PASS=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^POSTGRES_PASSWORD=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2-" || true)
-              EXISTING_REDIS_PASS=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^REDIS_PASSWORD=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2-" || true)
-              EXISTING_POSTGRES_USER=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^POSTGRES_USER=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2-" || true)
-              EXISTING_POSTGRES_DB=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^POSTGRES_DB=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2-" || true)
+              EXISTING_POSTGRES_PASS=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^POSTGRES_PASSWORD=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2- | tr -d '\r'" || true)
+              EXISTING_REDIS_PASS=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^REDIS_PASSWORD=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2- | tr -d '\r'" || true)
+              EXISTING_POSTGRES_USER=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^POSTGRES_USER=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2- | tr -d '\r'" || true)
+              EXISTING_POSTGRES_DB=$($SSH_CMD $(PROD_SSH_USER)@$(PROD_SSH_HOST) "grep -E '^POSTGRES_DB=' /opt/apps/capital-app/.env 2>/dev/null | cut -d'=' -f2- | tr -d '\r'" || true)
 
               POSTGRES_USER_VAL="${POSTGRES_USER:-${EXISTING_POSTGRES_USER:-postgres}}"
               POSTGRES_DB_VAL="${POSTGRES_DB:-${EXISTING_POSTGRES_DB:-capitalfm_db}}"
