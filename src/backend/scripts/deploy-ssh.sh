@@ -71,7 +71,7 @@ if [ "$DEPLOY_CONTAINERIZED_DB" = "true" ]; then
 
     if [ -n "$POSTGRES_USER" ] && [ -n "$POSTGRES_PASSWORD" ]; then
         echo "Synchronizing PostgreSQL user password inside database container..."
-        docker exec -u postgres capital_fm_postgres psql -h /var/run/postgresql -U postgres -d "${POSTGRES_DB:-capitalfm_db}" -c "ALTER USER \"$POSTGRES_USER\" WITH PASSWORD '$POSTGRES_PASSWORD';" 2>/dev/null || docker exec -u postgres capital_fm_postgres psql -U postgres -d "${POSTGRES_DB:-capitalfm_db}" -c "ALTER USER \"$POSTGRES_USER\" WITH PASSWORD '$POSTGRES_PASSWORD';" 2>/dev/null || true
+        docker exec -u postgres capital_fm_postgres psql -U postgres -d postgres -c "ALTER ROLE \"$POSTGRES_USER\" WITH LOGIN PASSWORD '$POSTGRES_PASSWORD';" 2>/dev/null || docker exec -u postgres capital_fm_postgres psql -U postgres -d "${POSTGRES_DB:-capitalfm_db}" -c "ALTER ROLE \"$POSTGRES_USER\" WITH LOGIN PASSWORD '$POSTGRES_PASSWORD';" 2>/dev/null || true
     fi
 fi
 
