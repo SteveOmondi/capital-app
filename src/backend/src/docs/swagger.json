@@ -275,6 +275,19 @@
       }
     },
     "/api/v1/user/profile": {
+      "get": {
+        "summary": "Fetch Subscribed User Profile",
+        "description": "Returns current user profile by authenticated X-User-Email or Bearer token.",
+        "security": [{ "UserEmailHeader": [] }, { "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "User profile DTO."
+          },
+          "401": {
+            "description": "Unauthorized request."
+          }
+        }
+      },
       "post": {
         "summary": "Subscribe / Register User Profile",
         "description": "Upserts subscribed user profile (email + optional username) and returns welcome greeting.",
@@ -295,6 +308,32 @@
         "responses": {
           "200": {
             "description": "User profile DTO with welcome message."
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete User Profile & Associated Data",
+        "description": "Permanently deletes user profile, saved audio favorites, push notification tokens, and all associated personal records.",
+        "security": [{ "UserEmailHeader": [] }, { "BearerAuth": [] }],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User profile and data permanently deleted."
+          },
+          "404": {
+            "description": "User profile not found."
           }
         }
       }

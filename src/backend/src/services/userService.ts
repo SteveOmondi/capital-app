@@ -63,3 +63,23 @@ export async function getUserProfileByEmail(email: string): Promise<UserProfileD
     updatedAt: user.updatedAt.toISOString(),
   };
 }
+
+export async function deleteUserProfile(email: string): Promise<boolean> {
+  const cleanEmail = email.trim().toLowerCase();
+
+  const existingUser = await prisma.user.findUnique({
+    where: { email: cleanEmail },
+  });
+
+  if (!existingUser) {
+    return false;
+  }
+
+  // Deleting the user will automatically cascade delete all user_favorites records due to onDelete: Cascade
+  await prisma.user.delete({
+    where: { email: cleanEmail },
+  });
+
+  return true;
+}
+

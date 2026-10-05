@@ -105,4 +105,33 @@ describe('User Profile & Favorites Sync Integration Tests', () => {
       expect(response.body).toHaveProperty('status', 'success');
     });
   });
+
+  describe('DELETE /api/v1/user/profile', () => {
+    it('should delete user profile and all associated data permanently', async () => {
+      const response = await request(app)
+        .delete('/api/v1/user/profile')
+        .set('X-User-Email', testEmail);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('status', 'success');
+      expect(response.body.data).toHaveProperty('email', testEmail);
+    });
+
+    it('should return 404 Not Found if attempting to delete non-existent profile', async () => {
+      const response = await request(app)
+        .delete('/api/v1/user/profile')
+        .set('X-User-Email', 'nonexistent.user@capitalfm.africa');
+
+      expect(response.status).toBe(404);
+      expect(response.body).toHaveProperty('status', 'error');
+    });
+
+    it('GET /delete-account should serve Capital FM account deletion HTML page', async () => {
+      const response = await request(app).get('/delete-account');
+      expect(response.status).toBe(200);
+      expect(response.text).toContain('Capital FM - Account & Data Deletion Guide');
+      expect(response.text).toContain('98.4');
+    });
+  });
 });
+

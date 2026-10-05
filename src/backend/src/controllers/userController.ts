@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { upsertUserProfile, getUserProfileByEmail } from '../services/userService';
+import { upsertUserProfile, getUserProfileByEmail, deleteUserProfile } from '../services/userService';
 import { getUserFavorites, addFavorite, removeFavorite } from '../services/favoriteService';
 
 export async function upsertProfileHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -42,6 +42,41 @@ export async function getProfileHandler(req: Request, res: Response, next: NextF
     res.status(200).json({
       status: 'success',
       data: profile,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteProfileHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const email = req.user?.email || req.body?.email || (req.query?.email as string);
+
+    if (!email) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Email address is required to delete profile.',
+      });
+      return;
+    }
+
+    const deleted = await deleteUserProfile(email);
+
+    if (!deleted) {
+      res.status(404).json({
+        status: 'error',
+        message: `User profile with email '${email}' was not found or has already been deleted.`,
+      });
+      return;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'User profile and all associated data have been permanently deleted.',
+      data: {
+        email: email.trim().toLowerCase(),
+        deletedAt: new Date().toISOString(),
+      },
     });
   } catch (error) {
     next(error);
@@ -120,3 +155,4 @@ export async function removeFavoriteHandler(req: Request, res: Response, next: N
     next(error);
   }
 }
+

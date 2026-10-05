@@ -1,6 +1,8 @@
 import express, { Express } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import path from 'path';
+import fs from 'fs';
 import { config } from './config';
 import { httpLogger } from './middlewares/logger';
 import { errorHandler } from './middlewares/errorHandler';
@@ -18,7 +20,7 @@ export function createApp(): Express {
     ? config.corsOrigin.split(',').map((o) => o.trim())
     : config.corsOrigin || '*';
 
-  app.use(helmet());
+  app.use(helmet({ contentSecurityPolicy: false }));
   app.use(
     cors({
       origin: allowedOrigins,
@@ -30,6 +32,21 @@ export function createApp(): Express {
   app.use(httpLogger);
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
+
+  // Static File Serving
+  app.use(express.static(path.join(__dirname, '../public')));
+  app.use(express.static(path.join(__dirname, 'public')));
+
+  // Account Deletion HTML Page Routes
+  app.get(['/delete-account', '/account-deletion', '/user/delete-account'], (_req, res) => {
+    const rootPublic = path.join(__dirname, '../public/account-deletion.html');
+    const srcPublic = path.join(__dirname, 'public/account-deletion.html');
+    if (fs.existsSync(rootPublic)) {
+      res.sendFile(rootPublic);
+    } else {
+      res.sendFile(srcPublic);
+    }
+  });
 
   // Apply Rate Limiting on API Endpoints
   app.use('/api/v1', apiRateLimiter);
@@ -44,3 +61,4 @@ export function createApp(): Express {
 }
 
 export default createApp();
+

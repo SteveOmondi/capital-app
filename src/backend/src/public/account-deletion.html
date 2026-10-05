@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Capital FM - Account & Data Deletion Guide</title>
+  <meta name="description" content="Learn how to delete your 98.4 Capital FM app profile, saved favorites, and associated account data. Follow our step-by-step guide or use our direct account deletion portal.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #C8102E;
+      --primary-hover: #A30B23;
+      --primary-light: rgba(200, 16, 46, 0.08);
+      --dark-bg: #0B0C10;
+      --dark-surface: #14161F;
+      --dark-card: #1C1F2C;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --border-color: #E2E8F0;
+      --card-bg: #FFFFFF;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --shadow-sm: 0 4px 12px rgba(0,0,0,0.05);
+      --shadow-lg: 0 20px 40px rgba(0,0,0,0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #F8FAFC;
+      color: var(--text-main);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* HEADER / NAVBAR */
+    .navbar {
+      background: #0B0C10;
+      color: #FFFFFF;
+      padding: 1rem 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 2px solid var(--primary);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: white;
+    }
+
+    .logo-badge {
+      background: var(--primary);
+      color: white;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 1.3rem;
+      padding: 4px 12px;
+      border-radius: 6px;
+      letter-spacing: -0.5px;
+      box-shadow: 0 0 15px rgba(200, 16, 46, 0.4);
+    }
+
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 1.25rem;
+      letter-spacing: 0.5px;
+      line-height: 1.1;
+    }
+
+    .brand-tagline {
+      font-size: 0.7rem;
+      color: #94A3B8;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: #CBD5E1;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: #FFFFFF;
+    }
+
+    .btn-delete-nav {
+      background: var(--primary);
+      color: white !important;
+      padding: 8px 18px;
+      border-radius: 30px;
+      font-weight: 600 !important;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(200, 16, 46, 0.3);
+    }
+
+    .btn-delete-nav:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    /* HERO SECTION */
+    .hero {
+      background: linear-gradient(135deg, #0B0C10 0%, #161824 100%);
+      color: white;
+      padding: 4rem 2rem 5rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    }
+
+    .hero-container {
+      max-width: 850px;
+      margin: 0 auto;
+    }
+
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(200, 16, 46, 0.15);
+      border: 1px solid rgba(200, 16, 46, 0.4);
+      color: #FF6B81;
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .hero h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.75rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+      line-height: 1.2;
+    }
+
+    .hero p {
+      font-size: 1.15rem;
+      color: #94A3B8;
+      max-width: 700px;
+      margin: 0 auto 2rem;
+    }
+
+    /* MAIN CONTENT */
+    .container {
+      max-width: 1050px;
+      margin: -2rem auto 4rem;
+      padding: 0 1.5rem;
+      position: relative;
+      z-index: 10;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius-lg);
+      padding: 2.5rem;
+      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid #F1F5F9;
+      padding-bottom: 1rem;
+    }
+
+    .icon-wrapper {
+      width: 44px;
+      height: 44px;
+      background: var(--primary-light);
+      color: var(--primary);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.25rem;
+    }
+
+    .card-header h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.5rem;
+      color: #0F172A;
+    }
+
+    /* DIRECT DELETION FORM SANDBOX */
+    .sandbox-card {
+      background: linear-gradient(180deg, #FFFFFF 0%, #FFF5F6 100%);
+      border: 2px solid rgba(200, 16, 46, 0.2);
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-group label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+      color: #334155;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1.5px solid #CBD5E1;
+      border-radius: var(--radius-sm);
+      font-size: 1rem;
+      transition: all 0.2s ease;
+      background: #FFFFFF;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(200, 16, 46, 0.12);
+    }
+
+    .form-hint {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.4rem;
+    }
+
+    .btn-danger {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .btn-danger:hover {
+      background: var(--primary-hover);
+      box-shadow: 0 6px 20px rgba(200, 16, 46, 0.35);
+    }
+
+    .btn-danger:disabled {
+      background: #CBD5E1;
+      cursor: not-allowed;
+    }
+
+    /* STEPS GRID */
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .step-box {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      position: relative;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .step-box:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .step-num {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 2rem;
+      color: #E2E8F0;
+    }
+
+    .step-box h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.15rem;
+      margin-bottom: 0.75rem;
+      color: #0F172A;
+    }
+
+    .step-box p {
+      font-size: 0.95rem;
+      color: #475569;
+    }
+
+    .step-box ol {
+      margin-left: 1.25rem;
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      color: #475569;
+    }
+
+    .step-box ol li {
+      margin-bottom: 0.4rem;
+    }
+
+    /* DATA RETENTION TABLE */
+    .data-table-container {
+      overflow-x: auto;
+      margin-top: 1rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.95rem;
+    }
+
+    th {
+      background: #F1F5F9;
+      color: #334155;
+      font-weight: 700;
+      padding: 12px 16px;
+      border-bottom: 2px solid #E2E8F0;
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #E2E8F0;
+      color: #475569;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-deleted {
+      background: #FEE2E2;
+      color: #991B1B;
+    }
+
+    .badge-retained {
+      background: #FEF3C7;
+      color: #92400E;
+    }
+
+    /* FAQ ACCORDION */
+    .faq-item {
+      border: 1px solid #E2E8F0;
+      border-radius: var(--radius-sm);
+      margin-bottom: 0.75rem;
+      overflow: hidden;
+    }
+
+    .faq-question {
+      width: 100%;
+      text-align: left;
+      padding: 1rem 1.25rem;
+      background: #F8FAFC;
+      border: none;
+      font-weight: 600;
+      font-size: 1rem;
+      color: #1E293B;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .faq-question:hover {
+      background: #F1F5F9;
+    }
+
+    .faq-answer {
+      padding: 1rem 1.25rem;
+      background: white;
+      display: none;
+      font-size: 0.95rem;
+      color: #475569;
+      border-top: 1px solid #E2E8F0;
+    }
+
+    .faq-item.active .faq-answer {
+      display: block;
+    }
+
+    .faq-item.active .faq-icon {
+      transform: rotate(180deg);
+    }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-box {
+      background: white;
+      border-radius: var(--radius-lg);
+      max-width: 500px;
+      width: 90%;
+      padding: 2rem;
+      box-shadow: var(--shadow-lg);
+      transform: scale(0.95);
+      transition: transform 0.2s ease;
+    }
+
+    .modal-overlay.active .modal-box {
+      transform: scale(1);
+    }
+
+    .modal-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.4rem;
+      color: #991B1B;
+      margin-bottom: 0.75rem;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 1.5rem;
+    }
+
+    .btn-secondary {
+      background: #E2E8F0;
+      color: #334155;
+      border: none;
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      cursor: pointer;
+      flex: 1;
+    }
+
+    /* ALERT / STATUS BOX */
+    .alert-box {
+      padding: 1rem;
+      border-radius: var(--radius-sm);
+      margin-top: 1rem;
+      display: none;
+      font-size: 0.95rem;
+    }
+
+    .alert-success {
+      background: #DEF7EC;
+      border: 1px solid #84E1BC;
+      color: #03543F;
+    }
+
+    .alert-error {
+      background: #FDE8E8;
+      border: 1px solid #F8B4B4;
+      color: #9B1C1C;
+    }
+
+    /* FOOTER */
+    footer {
+      background: #0B0C10;
+      color: #94A3B8;
+      text-align: center;
+      padding: 3rem 2rem;
+      font-size: 0.9rem;
+      border-top: 1px solid #1E293B;
+    }
+
+    footer a {
+      color: #CBD5E1;
+      text-decoration: underline;
+    }
+
+    footer a:hover {
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="https://www.capitalfm.africa" class="brand-logo" target="_blank" rel="noopener">
+        <div class="logo-badge">98.4</div>
+        <div class="brand-text">
+          <span class="brand-title">CAPITAL FM</span>
+          <span class="brand-tagline">BEST MIX OF MUSIC</span>
+        </div>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#methods">How To Delete</a></li>
+        <li><a href="#sandbox">Direct Portal</a></li>
+        <li><a href="#data-policy">Data Policy</a></li>
+        <li><a href="#sandbox" class="btn-delete-nav">Delete Profile</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- HERO HEADER -->
+  <header class="hero" id="overview">
+    <div class="hero-container">
+      <div class="hero-pill">
+        <span>🛡️ Data Privacy & Transparency</span>
+      </div>
+      <h1>Account & Data Deletion Portal</h1>
+      <p>We believe in total ownership of your personal data. Learn how to manage, export, or permanently purge your 98.4 Capital FM mobile app profile and associated data.</p>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- DIRECT DELETION PORTAL (SANDBOX) -->
+    <div class="card sandbox-card" id="sandbox">
+      <div class="card-header">
+        <div class="icon-wrapper">🗑️</div>
+        <div>
+          <h2>Instant Profile & Data Deletion Portal</h2>
+          <p style="font-size: 0.9rem; color: #64748B;">Delete your Capital FM profile and server-synced data directly without submitting a support ticket.</p>
+        </div>
+      </div>
+
+      <form id="deletionForm" onsubmit="handleFormSubmit(event)">
+        <div class="form-group">
+          <label for="userEmail">Registered Account Email Address *</label>
+          <input type="email" id="userEmail" class="form-control" placeholder="e.g. listener@capitalfm.africa" required>
+          <div class="form-hint">Enter the email address tied to your 98.4 Capital FM account.</div>
+        </div>
+
+        <div class="form-group">
+          <label for="authToken">Authorization Token or Header (Optional)</label>
+          <input type="text" id="authToken" class="form-control" placeholder="Bearer token or X-User-Email header">
+          <div class="form-hint">If signed into the mobile app, you can supply your session token or leave empty for email-based verification.</div>
+        </div>
+
+        <button type="submit" class="btn-danger" id="submitBtn">
+          <span>Permanently Delete Profile & Data</span>
+        </button>
+      </form>
+
+      <div id="alertBox" class="alert-box"></div>
+    </div>
+
+    <!-- HOW TO DELETE STEPS -->
+    <div class="card" id="methods">
+      <div class="card-header">
+        <div class="icon-wrapper">📱</div>
+        <h2>3 Ways to Delete Your Account</h2>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-box">
+          <div class="step-num">01</div>
+          <h3>In-App Deletion</h3>
+          <p>Delete your profile directly from within the 98.4 Capital FM Android or iOS mobile application:</p>
+          <ol>
+            <li>Open the <strong>Capital FM App</strong>.</li>
+            <li>Tap on <strong>Profile / Settings</strong> tab.</li>
+            <li>Select <strong>Account & Security</strong>.</li>
+            <li>Tap <strong>Delete Account & Data</strong> and confirm.</li>
+          </ol>
+        </div>
+
+        <div class="step-box">
+          <div class="step-num">02</div>
+          <h3>Web Self-Service</h3>
+          <p>Use our direct web form above on this page to trigger instantaneous profile deletion via our backend gateway.</p>
+          <ol>
+            <li>Enter your registered email address.</li>
+            <li>Confirm deletion in the prompt.</li>
+            <li>Your record is deleted immediately.</li>
+          </ol>
+        </div>
+
+        <div class="step-box">
+          <div class="step-num">03</div>
+          <h3>Email Support Request</h3>
+          <p>Contact our dedicated Data Privacy Team to process your request manually:</p>
+          <ol>
+            <li>Send email to <a href="mailto:privacy@capitalfm.co.ke" style="color: var(--primary); font-weight: 600;">privacy@capitalfm.co.ke</a></li>
+            <li>Subject: <em>Account Deletion Request</em></li>
+            <li>Processed within 48 business hours.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- DATA RETENTION & POLICY -->
+    <div class="card" id="data-policy">
+      <div class="card-header">
+        <div class="icon-wrapper">📊</div>
+        <h2>What Data Gets Deleted vs. Retained</h2>
+      </div>
+      <p style="color: #64748B; margin-bottom: 1rem;">In accordance with Google Play Store, Apple App Store, and Kenya Data Protection Act regulations, here is a transparent breakdown of how your data is handled upon deletion:</p>
+
+      <div class="data-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Data Type</th>
+              <th>Description</th>
+              <th>Status Upon Deletion</th>
+              <th>Retention Window</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>User Profile</strong></td>
+              <td>Email address, username, profile preferences</td>
+              <td><span class="badge badge-deleted">Permanently Deleted</span></td>
+              <td>Instant (0 Days)</td>
+            </tr>
+            <tr>
+              <td><strong>Server Favorites</strong></td>
+              <td>Saved audio shows, podcasts, news articles</td>
+              <td><span class="badge badge-deleted">Permanently Deleted</span></td>
+              <td>Instant (0 Days)</td>
+            </tr>
+            <tr>
+              <td><strong>Device Tokens (FCM)</strong></td>
+              <td>Firebase push notification registration tokens</td>
+              <td><span class="badge badge-deleted">Unsubscribed & Purged</span></td>
+              <td>Instant (0 Days)</td>
+            </tr>
+            <tr>
+              <td><strong>Anonymous Analytics</strong></td>
+              <td>De-identified aggregate streaming telemetry</td>
+              <td><span class="badge badge-retained">Anonymized</span></td>
+              <td>90 Days Aggregate</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- FAQ SECTION -->
+    <div class="card">
+      <div class="card-header">
+        <div class="icon-wrapper">❓</div>
+        <h2>Frequently Asked Questions</h2>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          <span>Can I recover my account after deleting it?</span>
+          <span class="faq-icon">▼</span>
+        </button>
+        <div class="faq-answer">
+          No. Account deletion is permanent and irreversible. Once deleted, all saved favorites, custom show preferences, and personal profile data are permanently wiped from our databases.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          <span>How long does the deletion process take?</span>
+          <span class="faq-icon">▼</span>
+        </button>
+        <div class="faq-answer">
+          Account deletion via the in-app menu or web self-service portal is instantaneous. Requests submitted via email to privacy@capitalfm.co.ke are verified and completed within 48 hours.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          <span>What happens to my downloaded audio or offline episodes?</span>
+          <span class="faq-icon">▼</span>
+        </button>
+        <div class="faq-answer">
+          Deleting your profile clears your server-side account. Any cached files stored locally on your physical device can be removed by uninstalling the Capital FM application or clearing local app data in your phone settings.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CONFIRMATION MODAL -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal-box">
+      <h3 class="modal-title">Confirm Account Deletion</h3>
+      <p style="color: #475569; font-size: 0.95rem; margin-bottom: 1rem;">
+        Are you sure you want to permanently delete your Capital FM profile for <strong id="modalEmailDisplay" style="color: #0F172A;"></strong>?
+      </p>
+      <p style="color: #991B1B; background: #FEE2E2; padding: 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 500;">
+        ⚠️ Warning: This action cannot be undone. All saved favorites, user preferences, and profile data will be permanently erased.
+      </p>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-danger" style="flex: 1;" onclick="executeDeletion()">Confirm & Delete Now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div style="max-width: 1200px; margin: 0 auto;">
+      <p>Copyright &copy; 2026 <strong>Capital Group Limited (Capital FM Kenya)</strong>. All rights reserved.</p>
+      <p style="margin-top: 0.5rem; font-size: 0.85rem;">
+        <a href="https://www.capitalfm.africa" target="_blank">Capital FM Website</a> &bull; 
+        <a href="mailto:privacy@capitalfm.co.ke">Data Protection Office</a> &bull; 
+        <a href="/docs">API Documentation</a>
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    let pendingEmail = '';
+    let pendingToken = '';
+
+    function toggleFaq(btn) {
+      const item = btn.parentElement;
+      item.classList.toggle('active');
+    }
+
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      pendingEmail = document.getElementById('userEmail').value.trim();
+      pendingToken = document.getElementById('authToken').value.trim();
+
+      if (!pendingEmail) return;
+
+      document.getElementById('modalEmailDisplay').textContent = pendingEmail;
+      document.getElementById('confirmModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('confirmModal').classList.remove('active');
+    }
+
+    async function executeDeletion() {
+      closeModal();
+
+      const submitBtn = document.getElementById('submitBtn');
+      const alertBox = document.getElementById('alertBox');
+      
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>Processing Deletion...</span>';
+      alertBox.style.display = 'none';
+
+      try {
+        const headers = {
+          'Content-Type': 'application/json'
+        };
+
+        if (pendingToken) {
+          if (pendingToken.startsWith('Bearer ') || pendingToken.includes('@')) {
+            headers['Authorization'] = pendingToken.startsWith('Bearer ') ? pendingToken : `Bearer ${pendingToken}`;
+          } else {
+            headers['X-User-Email'] = pendingToken;
+          }
+        } else {
+          headers['X-User-Email'] = pendingEmail;
+        }
+
+        const response = await fetch('/api/v1/user/profile', {
+          method: 'DELETE',
+          headers: headers,
+          body: JSON.stringify({ email: pendingEmail })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.status === 'success') {
+          alertBox.className = 'alert-box alert-success';
+          alertBox.innerHTML = `
+            <strong>Account Deleted Successfully!</strong><br>
+            Profile and all associated server data for <em>${pendingEmail}</em> have been permanently removed.
+          `;
+          document.getElementById('userEmail').value = '';
+          document.getElementById('authToken').value = '';
+        } else {
+          alertBox.className = 'alert-box alert-error';
+          alertBox.innerHTML = `
+            <strong>Deletion Request Failed:</strong> ${data.message || 'Unable to delete profile.'}
+          `;
+        }
+      } catch (err) {
+        alertBox.className = 'alert-box alert-error';
+        alertBox.innerHTML = `
+          <strong>Connection Error:</strong> Could not communicate with deletion server. Please try again or email privacy@capitalfm.co.ke.
+        `;
+      } finally {
+        alertBox.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Permanently Delete Profile & Data</span>';
+      }
+    }
+  </script>
+</body>
+</html>

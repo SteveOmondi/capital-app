@@ -242,7 +242,29 @@ Register the device FCM token to receive breaking news and show notifications.
 }
 ```
 
-### 6.2 Save Favorite Item
+### 6.2 Delete Profile & User Data (GDPR / Store Privacy Compliance)
+- **Endpoint**: `DELETE /api/v1/user/profile`
+- **Headers**: `X-User-Email: user@capitalfm.co.ke` or `Authorization: Bearer <token>`
+- **Request Body (Optional)**:
+```json
+{
+  "email": "user@capitalfm.co.ke"
+}
+```
+- **Response**:
+```json
+{
+  "status": "success",
+  "message": "User profile and all associated data have been permanently deleted.",
+  "data": {
+    "email": "user@capitalfm.co.ke",
+    "deletedAt": "2026-10-05T22:15:00.000Z"
+  }
+}
+```
+- **Web Account Deletion Portal**: `https://api.capitalfm.africa/delete-account` (or `/account-deletion`)
+
+### 6.3 Save Favorite Item
 - **Endpoint**: `POST /api/v1/user/favorites`
 - **Headers**: `X-User-Email: user@capitalfm.co.ke`
 - **Request**:
@@ -256,6 +278,7 @@ Register the device FCM token to receive breaking news and show notifications.
   }
 }
 ```
+
 
 ---
 
