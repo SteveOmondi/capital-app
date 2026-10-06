@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Capital FM - Account & Data Deletion Guide</title>
-  <meta name="description" content="Learn how to delete your 98.4 Capital FM app profile, saved favorites, and associated account data. Follow our step-by-step guide or use our direct account deletion portal.">
+  <meta name="description" content="Learn how to delete your 98.4 Capital FM app profile, saved favorites, and associated account data via our email-verified deep link deletion journey.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -238,7 +238,7 @@
       color: #0F172A;
     }
 
-    /* DIRECT DELETION FORM SANDBOX */
+    /* DIRECT DELETION FORM PORTAL */
     .sandbox-card {
       background: linear-gradient(180deg, #FFFFFF 0%, #FFF5F6 100%);
       border: 2px solid rgba(200, 16, 46, 0.2);
@@ -278,6 +278,28 @@
       margin-top: 0.4rem;
     }
 
+    .btn-primary-action {
+      background: #0F172A;
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .btn-primary-action:hover {
+      background: #1E293B;
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.25);
+    }
+
     .btn-danger {
       background: var(--primary);
       color: white;
@@ -300,64 +322,60 @@
       box-shadow: 0 6px 20px rgba(200, 16, 46, 0.35);
     }
 
-    .btn-danger:disabled {
+    .btn-danger:disabled, .btn-primary-action:disabled {
       background: #CBD5E1;
       cursor: not-allowed;
     }
 
-    /* STEPS GRID */
-    .steps-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.5rem;
+    /* JOURNEY STEPS FLOW */
+    .journey-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
       margin-top: 1.5rem;
     }
 
-    .step-box {
-      background: #F8FAFC;
+    .journey-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 1.25rem;
+      background: #FFFFFF;
       border: 1px solid #E2E8F0;
       border-radius: var(--radius-md);
-      padding: 1.5rem;
-      position: relative;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      padding: 1.25rem;
+      transition: all 0.2s ease;
     }
 
-    .step-box:hover {
-      transform: translateY(-3px);
+    .journey-step:hover {
+      border-color: var(--primary);
       box-shadow: var(--shadow-sm);
     }
 
-    .step-num {
-      position: absolute;
-      top: 1rem;
-      right: 1rem;
+    .journey-step-badge {
+      background: var(--dark-bg);
+      color: #FFFFFF;
       font-family: 'Outfit', sans-serif;
       font-weight: 800;
-      font-size: 2rem;
-      color: #E2E8F0;
+      font-size: 1.1rem;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
     }
 
-    .step-box h3 {
+    .journey-step-content h4 {
       font-family: 'Outfit', sans-serif;
-      font-size: 1.15rem;
-      margin-bottom: 0.75rem;
+      font-size: 1.1rem;
       color: #0F172A;
+      margin-bottom: 0.25rem;
     }
 
-    .step-box p {
+    .journey-step-content p {
       font-size: 0.95rem;
       color: #475569;
-    }
-
-    .step-box ol {
-      margin-left: 1.25rem;
-      margin-top: 0.5rem;
-      font-size: 0.9rem;
-      color: #475569;
-    }
-
-    .step-box ol li {
-      margin-bottom: 0.4rem;
     }
 
     /* DATA RETENTION TABLE */
@@ -476,7 +494,7 @@
     .modal-box {
       background: white;
       border-radius: var(--radius-lg);
-      max-width: 500px;
+      max-width: 520px;
       width: 90%;
       padding: 2rem;
       box-shadow: var(--shadow-lg);
@@ -514,17 +532,24 @@
 
     /* ALERT / STATUS BOX */
     .alert-box {
-      padding: 1rem;
+      padding: 1.2rem;
       border-radius: var(--radius-sm);
-      margin-top: 1rem;
+      margin-top: 1.25rem;
       display: none;
       font-size: 0.95rem;
+      line-height: 1.5;
     }
 
     .alert-success {
       background: #DEF7EC;
       border: 1px solid #84E1BC;
       color: #03543F;
+    }
+
+    .alert-info {
+      background: #E1F5FE;
+      border: 1px solid #81D4FA;
+      color: #0277BD;
     }
 
     .alert-error {
@@ -567,10 +592,10 @@
       </a>
       <ul class="nav-links">
         <li><a href="#overview">Overview</a></li>
-        <li><a href="#methods">How To Delete</a></li>
-        <li><a href="#sandbox">Direct Portal</a></li>
+        <li><a href="#methods">8-Step Journey</a></li>
+        <li><a href="#sandbox">Account Portal</a></li>
         <li><a href="#data-policy">Data Policy</a></li>
-        <li><a href="#sandbox" class="btn-delete-nav">Delete Profile</a></li>
+        <li><a href="#sandbox" class="btn-delete-nav">Request Deletion</a></li>
       </ul>
     </div>
   </nav>
@@ -579,86 +604,131 @@
   <header class="hero" id="overview">
     <div class="hero-container">
       <div class="hero-pill">
-        <span>🛡️ Data Privacy & Transparency</span>
+        <span>🛡️ Deep Link Verified Deletion Journey</span>
       </div>
       <h1>Account & Data Deletion Portal</h1>
-      <p>We believe in total ownership of your personal data. Learn how to manage, export, or permanently purge your 98.4 Capital FM mobile app profile and associated data.</p>
+      <p>We strictly enforce user data privacy regulations. Follow our 8-step email-verified deep link deletion journey to request and confirm permanent profile deletion.</p>
     </div>
   </header>
 
   <div class="container">
 
-    <!-- DIRECT DELETION PORTAL (SANDBOX) -->
+    <!-- DIRECT DELETION PORTAL (Interactive 8-Step Verification Flow) -->
     <div class="card sandbox-card" id="sandbox">
       <div class="card-header">
-        <div class="icon-wrapper">🗑️</div>
+        <div class="icon-wrapper">📧</div>
         <div>
-          <h2>Instant Profile & Data Deletion Portal</h2>
-          <p style="font-size: 0.9rem; color: #64748B;">Delete your Capital FM profile and server-synced data directly without submitting a support ticket.</p>
+          <h2>Account Deletion & Verification Portal</h2>
+          <p style="font-size: 0.9rem; color: #64748B;">Enter your registered email below to receive a secure deep link confirmation email, or confirm account deletion using your token.</p>
         </div>
       </div>
 
-      <form id="deletionForm" onsubmit="handleFormSubmit(event)">
+      <!-- Step A: Request Email Link Form -->
+      <form id="requestLinkForm" onsubmit="handleRequestLink(event)">
         <div class="form-group">
           <label for="userEmail">Registered Account Email Address *</label>
           <input type="email" id="userEmail" class="form-control" placeholder="e.g. listener@capitalfm.africa" required>
-          <div class="form-hint">Enter the email address tied to your 98.4 Capital FM account.</div>
+          <div class="form-hint">Enter the email address associated with your Capital FM mobile application profile.</div>
         </div>
 
-        <div class="form-group">
-          <label for="authToken">Authorization Token or Header (Optional)</label>
-          <input type="text" id="authToken" class="form-control" placeholder="Bearer token or X-User-Email header">
-          <div class="form-hint">If signed into the mobile app, you can supply your session token or leave empty for email-based verification.</div>
-        </div>
-
-        <button type="submit" class="btn-danger" id="submitBtn">
-          <span>Permanently Delete Profile & Data</span>
+        <button type="submit" class="btn-primary-action" id="requestBtn">
+          <span>✉️ Send Deletion Link to My Email</span>
         </button>
       </form>
+
+      <!-- Step B: Confirm Deletion Section (Appears when Token is provided or in URL) -->
+      <div id="confirmSection" style="display: none; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px stroke #E2E8F0;">
+        <div style="background: #FFF5F6; border: 1.5px solid rgba(200, 16, 46, 0.3); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.25rem;">
+          <h3 style="font-family: 'Outfit', sans-serif; color: #991B1B; font-size: 1.2rem; margin-bottom: 0.5rem;">
+            ⚠️ Confirm Account Deletion
+          </h3>
+          <p style="font-size: 0.95rem; color: #475569; margin-bottom: 1rem;">
+            A valid account deletion token has been detected. Click below to permanently purge profile data for <strong id="tokenEmailDisplay" style="color: #0F172A;"></strong>.
+          </p>
+          <div class="form-group">
+            <label for="deletionTokenInput">Deletion Verification Token</label>
+            <input type="text" id="deletionTokenInput" class="form-control" placeholder="del_..." readonly>
+          </div>
+          <button type="button" class="btn-danger" id="confirmBtn" onclick="openConfirmModal()">
+            <span>🔥 Confirm & Delete Account Now</span>
+          </button>
+        </div>
+      </div>
 
       <div id="alertBox" class="alert-box"></div>
     </div>
 
-    <!-- HOW TO DELETE STEPS -->
+    <!-- 8-STEP DELETION JOURNEY breakdown -->
     <div class="card" id="methods">
       <div class="card-header">
-        <div class="icon-wrapper">📱</div>
-        <h2>3 Ways to Delete Your Account</h2>
+        <div class="icon-wrapper">🔄</div>
+        <h2>The 8-Step Profile Deletion Journey</h2>
       </div>
+      <p style="color: #64748B; margin-bottom: 1rem;">Our secure account deletion process protects users against accidental or unauthorized account deletion through 2-factor email confirmation and mobile deep linking:</p>
 
-      <div class="steps-grid">
-        <div class="step-box">
-          <div class="step-num">01</div>
-          <h3>In-App Deletion</h3>
-          <p>Delete your profile directly from within the 98.4 Capital FM Android or iOS mobile application:</p>
-          <ol>
-            <li>Open the <strong>Capital FM App</strong>.</li>
-            <li>Tap on <strong>Profile / Settings</strong> tab.</li>
-            <li>Select <strong>Account & Security</strong>.</li>
-            <li>Tap <strong>Delete Account & Data</strong> and confirm.</li>
-          </ol>
+      <div class="journey-timeline">
+        <div class="journey-step">
+          <div class="journey-step-badge">1</div>
+          <div class="journey-step-content">
+            <h4>User Requests Account Deletion</h4>
+            <p>The customer initiates profile deletion from within the Capital FM mobile app settings menu or via our web portal.</p>
+          </div>
         </div>
 
-        <div class="step-box">
-          <div class="step-num">02</div>
-          <h3>Web Self-Service</h3>
-          <p>Use our direct web form above on this page to trigger instantaneous profile deletion via our backend gateway.</p>
-          <ol>
-            <li>Enter your registered email address.</li>
-            <li>Confirm deletion in the prompt.</li>
-            <li>Your record is deleted immediately.</li>
-          </ol>
+        <div class="journey-step">
+          <div class="journey-step-badge">2</div>
+          <div class="journey-step-content">
+            <h4>App Sends Request to Backend</h4>
+            <p>The app transmits the account deletion request to our secure backend API (<code>POST /api/v1/user/delete-request</code>).</p>
+          </div>
         </div>
 
-        <div class="step-box">
-          <div class="step-num">03</div>
-          <h3>Email Support Request</h3>
-          <p>Contact our dedicated Data Privacy Team to process your request manually:</p>
-          <ol>
-            <li>Send email to <a href="mailto:privacy@capitalfm.co.ke" style="color: var(--primary); font-weight: 600;">privacy@capitalfm.co.ke</a></li>
-            <li>Subject: <em>Account Deletion Request</em></li>
-            <li>Processed within 48 business hours.</li>
-          </ol>
+        <div class="journey-step">
+          <div class="journey-step-badge">3</div>
+          <div class="journey-step-content">
+            <h4>Server Returns Cryptographic Deletion Token</h4>
+            <p>The server generates a unique, 24-hour expiration token (<code>del_...</code>) and returns it securely to the mobile app.</p>
+          </div>
+        </div>
+
+        <div class="journey-step">
+          <div class="journey-step-badge">4</div>
+          <div class="journey-step-content">
+            <h4>App Generates Deep Link & Sends to Server</h4>
+            <p>The app formats a custom mobile deep link (<code>capitalfm://delete-account?token=...</code>) and posts it back to the backend gateway.</p>
+          </div>
+        </div>
+
+        <div class="journey-step">
+          <div class="journey-step-badge">5</div>
+          <div class="journey-step-content">
+            <h4>Server Emails Link to Customer Inbox</h4>
+            <p>Our server dispatches an automated, formatted confirmation email containing the verification link directly to the customer's inbox.</p>
+          </div>
+        </div>
+
+        <div class="journey-step">
+          <div class="journey-step-badge">6</div>
+          <div class="journey-step-content">
+            <h4>Customer Taps Email Link & Launches Confirmation Screen</h4>
+            <p>The customer clicks the link in their email client, automatically launching the Capital FM mobile app to the <strong>Confirm Account Deletion</strong> screen.</p>
+          </div>
+        </div>
+
+        <div class="journey-step">
+          <div class="journey-step-badge">7</div>
+          <div class="journey-step-content">
+            <h4>Final Confirmation Sent to Backend</h4>
+            <p>Upon final confirmation tap in the app, the token is sent to the backend server (<code>POST /api/v1/user/confirm-deletion</code>).</p>
+          </div>
+        </div>
+
+        <div class="journey-step">
+          <div class="journey-step-badge">8</div>
+          <div class="journey-step-content">
+            <h4>Backend Purges Profile & Returns Success</h4>
+            <p>The backend permanently deletes the user profile, server-synced audio favorites, push notification tokens, and all personal record associations.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -667,9 +737,9 @@
     <div class="card" id="data-policy">
       <div class="card-header">
         <div class="icon-wrapper">📊</div>
-        <h2>What Data Gets Deleted vs. Retained</h2>
+        <h2>Data Purge & Retention Summary</h2>
       </div>
-      <p style="color: #64748B; margin-bottom: 1rem;">In accordance with Google Play Store, Apple App Store, and Kenya Data Protection Act regulations, here is a transparent breakdown of how your data is handled upon deletion:</p>
+      <p style="color: #64748B; margin-bottom: 1rem;">In accordance with Google Play Store, Apple App Store, and Kenya Data Protection Act regulations, here is how your data is handled upon complete confirmation:</p>
 
       <div class="data-table-container">
         <table>
@@ -677,7 +747,7 @@
             <tr>
               <th>Data Type</th>
               <th>Description</th>
-              <th>Status Upon Deletion</th>
+              <th>Status Upon Confirmation</th>
               <th>Retention Window</th>
             </tr>
           </thead>
@@ -695,10 +765,16 @@
               <td>Instant (0 Days)</td>
             </tr>
             <tr>
-              <td><strong>Device Tokens (FCM)</strong></td>
-              <td>Firebase push notification registration tokens</td>
+              <td><strong>Device Push Tokens</strong></td>
+              <td>Firebase push notification device subscriptions</td>
               <td><span class="badge badge-deleted">Unsubscribed & Purged</span></td>
               <td>Instant (0 Days)</td>
+            </tr>
+            <tr>
+              <td><strong>Deletion Tokens</strong></td>
+              <td>Single-use email verification tokens</td>
+              <td><span class="badge badge-deleted">Invalidated & Expired</span></td>
+              <td>24 Hours Max</td>
             </tr>
             <tr>
               <td><strong>Anonymous Analytics</strong></td>
@@ -720,31 +796,31 @@
 
       <div class="faq-item">
         <button class="faq-question" onclick="toggleFaq(this)">
-          <span>Can I recover my account after deleting it?</span>
+          <span>Why does account deletion require email confirmation?</span>
           <span class="faq-icon">▼</span>
         </button>
         <div class="faq-answer">
-          No. Account deletion is permanent and irreversible. Once deleted, all saved favorites, custom show preferences, and personal profile data are permanently wiped from our databases.
+          Email confirmation ensures that unauthorized third parties or accidental taps cannot delete your account, saved audio favorites, or personal preferences without access to your verified email inbox.
         </div>
       </div>
 
       <div class="faq-item">
         <button class="faq-question" onclick="toggleFaq(this)">
-          <span>How long does the deletion process take?</span>
+          <span>How long is the deletion token valid?</span>
           <span class="faq-icon">▼</span>
         </button>
         <div class="faq-answer">
-          Account deletion via the in-app menu or web self-service portal is instantaneous. Requests submitted via email to privacy@capitalfm.co.ke are verified and completed within 48 hours.
+          Each deletion link token is valid for 24 hours. If unused within 24 hours, the link automatically expires, and a new request must be initiated.
         </div>
       </div>
 
       <div class="faq-item">
         <button class="faq-question" onclick="toggleFaq(this)">
-          <span>What happens to my downloaded audio or offline episodes?</span>
+          <span>Can I recover my account after confirmation?</span>
           <span class="faq-icon">▼</span>
         </button>
         <div class="faq-answer">
-          Deleting your profile clears your server-side account. Any cached files stored locally on your physical device can be removed by uninstalling the Capital FM application or clearing local app data in your phone settings.
+          No. Account deletion is permanent and unrecoverable. Once confirmed, all server-side records associated with your email are purged from our primary database and caching servers.
         </div>
       </div>
     </div>
@@ -754,16 +830,16 @@
   <!-- CONFIRMATION MODAL -->
   <div class="modal-overlay" id="confirmModal">
     <div class="modal-box">
-      <h3 class="modal-title">Confirm Account Deletion</h3>
+      <h3 class="modal-title">Confirm Complete Account Deletion</h3>
       <p style="color: #475569; font-size: 0.95rem; margin-bottom: 1rem;">
-        Are you sure you want to permanently delete your Capital FM profile for <strong id="modalEmailDisplay" style="color: #0F172A;"></strong>?
+        Are you sure you want to permanently purge all profile data for <strong id="modalEmailDisplay" style="color: #0F172A;"></strong>?
       </p>
       <p style="color: #991B1B; background: #FEE2E2; padding: 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 500;">
-        ⚠️ Warning: This action cannot be undone. All saved favorites, user preferences, and profile data will be permanently erased.
+        ⚠️ Warning: This action is permanent. All saved show favorites, user settings, and account details will be purged immediately.
       </p>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn-danger" style="flex: 1;" onclick="executeDeletion()">Confirm & Delete Now</button>
+        <button class="btn-danger" style="flex: 1;" id="finalModalBtn" onclick="executeFinalDeletion()">Confirm & Delete Now</button>
       </div>
     </div>
   </div>
@@ -781,22 +857,105 @@
   </footer>
 
   <script>
-    let pendingEmail = '';
-    let pendingToken = '';
+    let activeToken = '';
+    let activeEmail = '';
+
+    window.addEventListener('DOMContentLoaded', () => {
+      // Parse URL parameters for token or email (e.g. ?token=del_123&email=user@domain.com)
+      const urlParams = new URLSearchParams(window.location.search);
+      const tokenParam = urlParams.get('token') || urlParams.get('deletionToken');
+      const emailParam = urlParams.get('email');
+
+      if (tokenParam) {
+        activeToken = tokenParam;
+        activeEmail = emailParam || '';
+        document.getElementById('deletionTokenInput').value = activeToken;
+        document.getElementById('tokenEmailDisplay').textContent = activeEmail || 'your registered account';
+        document.getElementById('confirmSection').style.display = 'block';
+        if (emailParam) {
+          document.getElementById('userEmail').value = emailParam;
+        }
+      }
+    });
 
     function toggleFaq(btn) {
       const item = btn.parentElement;
       item.classList.toggle('active');
     }
 
-    function handleFormSubmit(e) {
+    async function handleRequestLink(e) {
       e.preventDefault();
-      pendingEmail = document.getElementById('userEmail').value.trim();
-      pendingToken = document.getElementById('authToken').value.trim();
+      const emailInput = document.getElementById('userEmail').value.trim();
+      const requestBtn = document.getElementById('requestBtn');
+      const alertBox = document.getElementById('alertBox');
 
-      if (!pendingEmail) return;
+      if (!emailInput) return;
 
-      document.getElementById('modalEmailDisplay').textContent = pendingEmail;
+      requestBtn.disabled = true;
+      requestBtn.innerHTML = '<span>Processing Deletion Request...</span>';
+      alertBox.style.display = 'none';
+
+      try {
+        // Step 2 & 3: Request deletion token from backend
+        const resToken = await fetch('/api/v1/user/delete-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailInput })
+        });
+
+        const tokenData = await resToken.json();
+
+        if (!resToken.ok || tokenData.status !== 'success') {
+          throw new Error(tokenData.message || 'Failed to generate deletion token.');
+        }
+
+        const deletionToken = tokenData.data.deletionToken;
+        const deepLink = `capitalfm://delete-account?token=${deletionToken}&email=${encodeURIComponent(emailInput)}`;
+
+        // Step 4 & 5: App / Portal sends deep link back to backend to trigger email dispatch
+        const resLink = await fetch('/api/v1/user/send-deletion-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: emailInput,
+            deletionToken: deletionToken,
+            deletionLink: deepLink
+          })
+        });
+
+        const linkResult = await resLink.json();
+
+        if (resLink.ok && linkResult.status === 'success') {
+          activeToken = deletionToken;
+          activeEmail = emailInput;
+          document.getElementById('deletionTokenInput').value = activeToken;
+          document.getElementById('tokenEmailDisplay').textContent = activeEmail;
+          document.getElementById('confirmSection').style.display = 'block';
+
+          alertBox.className = 'alert-box alert-success';
+          alertBox.innerHTML = `
+            <strong>✉️ Confirmation Link Sent to Email!</strong><br>
+            A secure deletion link has been dispatched to <em>${emailInput}</em>.<br>
+            Please check your email inbox and open the link on your mobile device to complete account deletion (or confirm below using token).
+          `;
+        } else {
+          throw new Error(linkResult.message || 'Failed to dispatch deletion email.');
+        }
+      } catch (err) {
+        alertBox.className = 'alert-box alert-error';
+        alertBox.innerHTML = `
+          <strong>Request Failed:</strong> ${err.message || 'Unable to process deletion request. Please try again.'}
+        `;
+      } finally {
+        alertBox.style.display = 'block';
+        requestBtn.disabled = false;
+        requestBtn.innerHTML = '<span>✉️ Send Deletion Link to My Email</span>';
+      }
+    }
+
+    function openConfirmModal() {
+      if (!activeToken) return;
+      document.getElementById('modalEmailDisplay').textContent = activeEmail || 'your profile';
       document.getElementById('confirmModal').classList.add('active');
     }
 
@@ -804,35 +963,25 @@
       document.getElementById('confirmModal').classList.remove('active');
     }
 
-    async function executeDeletion() {
+    async function executeFinalDeletion() {
       closeModal();
 
-      const submitBtn = document.getElementById('submitBtn');
+      const confirmBtn = document.getElementById('confirmBtn');
       const alertBox = document.getElementById('alertBox');
       
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span>Processing Deletion...</span>';
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span>Purging Profile Data...</span>';
       alertBox.style.display = 'none';
 
       try {
-        const headers = {
-          'Content-Type': 'application/json'
-        };
-
-        if (pendingToken) {
-          if (pendingToken.startsWith('Bearer ') || pendingToken.includes('@')) {
-            headers['Authorization'] = pendingToken.startsWith('Bearer ') ? pendingToken : `Bearer ${pendingToken}`;
-          } else {
-            headers['X-User-Email'] = pendingToken;
-          }
-        } else {
-          headers['X-User-Email'] = pendingEmail;
-        }
-
-        const response = await fetch('/api/v1/user/profile', {
-          method: 'DELETE',
-          headers: headers,
-          body: JSON.stringify({ email: pendingEmail })
+        // Step 7 & 8: Send token to confirm deletion
+        const response = await fetch('/api/v1/user/confirm-deletion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: activeEmail,
+            deletionToken: activeToken
+          })
         });
 
         const data = await response.json();
@@ -840,26 +989,28 @@
         if (response.ok && data.status === 'success') {
           alertBox.className = 'alert-box alert-success';
           alertBox.innerHTML = `
-            <strong>Account Deleted Successfully!</strong><br>
-            Profile and all associated server data for <em>${pendingEmail}</em> have been permanently removed.
+            <strong>🎉 Account Deleted Permanently!</strong><br>
+            User profile and all associated data for <em>${data.data?.email || activeEmail}</em> have been completely purged from the system.
           `;
           document.getElementById('userEmail').value = '';
-          document.getElementById('authToken').value = '';
+          document.getElementById('deletionTokenInput').value = '';
+          document.getElementById('confirmSection').style.display = 'none';
+          activeToken = '';
         } else {
           alertBox.className = 'alert-box alert-error';
           alertBox.innerHTML = `
-            <strong>Deletion Request Failed:</strong> ${data.message || 'Unable to delete profile.'}
+            <strong>Deletion Confirmation Failed:</strong> ${data.message || 'Invalid or expired deletion token.'}
           `;
         }
       } catch (err) {
         alertBox.className = 'alert-box alert-error';
         alertBox.innerHTML = `
-          <strong>Connection Error:</strong> Could not communicate with deletion server. Please try again or email privacy@capitalfm.co.ke.
+          <strong>Connection Error:</strong> Could not communicate with backend gateway. Please try again.
         `;
       } finally {
         alertBox.style.display = 'block';
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span>Permanently Delete Profile & Data</span>';
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '<span>🔥 Confirm & Delete Account Now</span>';
       }
     }
   </script>
