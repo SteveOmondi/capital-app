@@ -109,6 +109,11 @@ stages:
               STREAMGUYS_CLIENT_SECRET: $(STREAMGUYS_CLIENT_SECRET)
               STREAMGUYS_USERNAME: $(STREAMGUYS_USERNAME)
               STREAMGUYS_PASSWORD: $(STREAMGUYS_PASSWORD)
+              SMTP_HOST: $(SMTP_HOST)
+              SMTP_PORT: $(SMTP_PORT)
+              SMTP_USER: $(SMTP_USER)
+              SMTP_PASS: $(SMTP_PASS)
+              EMAIL_FROM: $(EMAIL_FROM)
             displayName: 'Execute Jest Test Suite'
 
   # =========================================================================
@@ -225,6 +230,11 @@ stages:
               STREAMGUYS_CLIENT_SECRET=$(STREAMGUYS_CLIENT_SECRET)
               STREAMGUYS_USERNAME=$(STREAMGUYS_USERNAME)
               STREAMGUYS_PASSWORD=$(STREAMGUYS_PASSWORD)
+              SMTP_HOST=$(SMTP_HOST)
+              SMTP_PORT=$(SMTP_PORT)
+              SMTP_USER=$(SMTP_USER)
+              SMTP_PASS=$(SMTP_PASS)
+              EMAIL_FROM=$(EMAIL_FROM)
               EOF
 
               $SCP_CMD /tmp/runtime.env $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/.env
