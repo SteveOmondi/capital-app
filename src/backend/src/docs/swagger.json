@@ -312,28 +312,12 @@
         }
       },
       "delete": {
-        "summary": "Delete User Profile & Associated Data",
-        "description": "Permanently deletes user profile, saved audio favorites, push notification tokens, and all associated personal records.",
+        "summary": "Delete User Profile & Associated Data (Disabled)",
+        "description": "Direct profile deletion is disabled. Account deletion must follow the verified email link workflow via /api/v1/user/request-deletion and /api/v1/user/confirm-deletion.",
         "security": [{ "UserEmailHeader": [] }, { "BearerAuth": [] }],
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "email": { "type": "string" }
-                }
-              }
-            }
-          }
-        },
         "responses": {
-          "200": {
-            "description": "User profile and data permanently deleted."
-          },
-          "404": {
-            "description": "User profile not found."
+          "403": {
+            "description": "Direct deletion is disabled. Directs caller to email verification flow."
           }
         }
       }

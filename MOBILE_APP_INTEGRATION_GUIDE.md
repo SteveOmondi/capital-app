@@ -242,26 +242,12 @@ Register the device FCM token to receive breaking news and show notifications.
 }
 ```
 
-### 6.2 Delete Profile & User Data (GDPR / Store Privacy Compliance)
-- **Endpoint**: `DELETE /api/v1/user/profile`
-- **Headers**: `X-User-Email: user@capitalfm.co.ke` or `Authorization: Bearer <token>`
-- **Request Body (Optional)**:
-```json
-{
-  "email": "user@capitalfm.co.ke"
-}
-```
-- **Response**:
-```json
-{
-  "status": "success",
-  "message": "User profile and all associated data have been permanently deleted.",
-  "data": {
-    "email": "user@capitalfm.co.ke",
-    "deletedAt": "2026-10-05T22:15:00.000Z"
-  }
-}
-```
+### 6.2 Profile & Data Deletion Flow (Email Verification Required)
+- **Direct Delete Endpoint (Disabled)**: `DELETE /api/v1/user/profile` (Returns HTTP 403 Forbidden - Direct deletion is disabled)
+- **Account Deletion Workflow**:
+  1. **Request Deletion Token**: `POST /api/v1/user/request-deletion` (Body: `{ "email": "user@capitalfm.co.ke" }`)
+  2. **Send Deep Link to Email**: `POST /api/v1/user/send-deletion-link` (Body: `{ "email": "...", "deletionToken": "...", "deletionLink": "..." }`)
+  3. **Confirm & Purge Account Data**: `POST /api/v1/user/confirm-deletion` (Body: `{ "email": "...", "deletionToken": "..." }`)
 - **Web Account Deletion Portal**: `https://api.capitalfm.africa/delete-account` (or `/account-deletion`)
 
 ### 6.3 Save Favorite Item

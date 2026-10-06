@@ -107,24 +107,15 @@ describe('User Profile & Favorites Sync Integration Tests', () => {
     });
   });
 
-  describe('DELETE /api/v1/user/profile', () => {
-    it('should delete user profile and all associated data permanently', async () => {
+  describe('DELETE /api/v1/user/profile (Disabled Direct Deletion)', () => {
+    it('should return 403 Forbidden indicating direct profile deletion is disabled in favor of email verification flow', async () => {
       const response = await request(app)
         .delete('/api/v1/user/profile')
         .set('X-User-Email', testEmail);
 
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('status', 'success');
-      expect(response.body.data).toHaveProperty('email', testEmail);
-    });
-
-    it('should return 404 Not Found if attempting to delete non-existent profile', async () => {
-      const response = await request(app)
-        .delete('/api/v1/user/profile')
-        .set('X-User-Email', 'nonexistent.user@capitalfm.africa');
-
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(403);
       expect(response.body).toHaveProperty('status', 'error');
+      expect(response.body.message).toContain('Direct profile deletion is disabled');
     });
 
     it('GET /delete-account should serve Capital FM account deletion HTML page', async () => {
