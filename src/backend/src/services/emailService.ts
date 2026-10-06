@@ -14,7 +14,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
   const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
-  const fromEmail = process.env.EMAIL_FROM || 'no-reply@capitalfm.africa';
+  const fromEmail = process.env.EMAIL_FROM || process.env.EmailFrom || 'no-reply@capitalfm.africa';
+  const fromName = process.env.EMAIL_FROM_NAME || process.env.EmailFromName || 'Capital FM 98.4';
+  const replyTo = process.env.REPLY_TO || process.env.EMAIL_REPLY_TO || process.env.ReplyTo;
 
   if (smtpHost && smtpUser && smtpPass) {
     try {
@@ -32,8 +34,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       });
 
       await transporter.sendMail({
-        from: `Capital FM 98.4 <${fromEmail}>`,
+        from: `"${fromName}" <${fromEmail}>`,
         to,
+        replyTo: replyTo || undefined,
         subject,
         text,
         html,
@@ -50,7 +53,8 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
   logger.info(
     {
       to,
-      from: fromEmail,
+      from: `"${fromName}" <${fromEmail}>`,
+      replyTo: replyTo || undefined,
       subject,
       previewText: text.substring(0, 100),
     },

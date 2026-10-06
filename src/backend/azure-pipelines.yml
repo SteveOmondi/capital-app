@@ -114,6 +114,8 @@ stages:
               SMTP_USER: $(SMTP_USER)
               SMTP_PASS: $(SMTP_PASS)
               EMAIL_FROM: $(EMAIL_FROM)
+              EMAIL_FROM_NAME: $(EMAIL_FROM_NAME)
+              REPLY_TO: $(REPLY_TO)
             displayName: 'Execute Jest Test Suite'
 
   # =========================================================================
@@ -235,6 +237,8 @@ stages:
               SMTP_USER=$(SMTP_USER)
               SMTP_PASS=$(SMTP_PASS)
               EMAIL_FROM=$(EMAIL_FROM)
+              EMAIL_FROM_NAME=$(EMAIL_FROM_NAME)
+              REPLY_TO=$(REPLY_TO)
               EOF
 
               $SCP_CMD /tmp/runtime.env $(PROD_SSH_USER)@$(PROD_SSH_HOST):/opt/apps/capital-app/.env
