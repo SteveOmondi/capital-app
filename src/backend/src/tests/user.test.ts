@@ -2,6 +2,7 @@ import request from 'supertest';
 import app from '../app';
 import { prisma } from '../config/db';
 import { redis } from '../config/redis';
+import { getUserProfileByEmail } from '../services/userService';
 
 describe('User Profile & Favorites Sync Integration Tests', () => {
   jest.setTimeout(15000);
@@ -131,6 +132,80 @@ describe('User Profile & Favorites Sync Integration Tests', () => {
       expect(response.status).toBe(200);
       expect(response.text).toContain('Capital FM - Account & Data Deletion Guide');
       expect(response.text).toContain('98.4');
+    });
+  });
+
+  describe('User Deletion Journey Endpoints (Token & Email Deep Link Flow)', () => {
+    const journeyEmail = 'deletion.journey@capitalfm.africa';
+    let generatedToken: string;
+
+    afterAll(async () => {
+      try {
+        await prisma.userFavorite.deleteMany({
+          where: { user: { email: journeyEmail } },
+        });
+        await prisma.user.deleteMany({
+          where: { email: journeyEmail },
+        });
+      } catch (_) {}
+    });
+
+    it('Step 2 & 3: POST /api/v1/user/delete-request should generate and return deletion token', async () => {
+      const res = await request(app)
+        .post('/api/v1/user/delete-request')
+        .send({ email: journeyEmail });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('success');
+      expect(res.body.data).toHaveProperty('deletionToken');
+      expect(res.body.data).toHaveProperty('expiresAt');
+      expect(res.body.data.email).toBe(journeyEmail);
+
+      generatedToken = res.body.data.deletionToken;
+    });
+
+    it('Step 4 & 5: POST /api/v1/user/send-deletion-link should verify token and send email with deep link', async () => {
+      const deepLink = `capitalfm://delete-account?token=${generatedToken}&email=${journeyEmail}`;
+
+      const res = await request(app)
+        .post('/api/v1/user/send-deletion-link')
+        .send({
+          email: journeyEmail,
+          deletionToken: generatedToken,
+          deletionLink: deepLink,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('success');
+      expect(res.body.message).toContain('sent to customer email');
+    });
+
+    it('Step 7 & 8: POST /api/v1/user/confirm-deletion should delete user data completely with valid token', async () => {
+      const res = await request(app)
+        .post('/api/v1/user/confirm-deletion')
+        .send({
+          email: journeyEmail,
+          deletionToken: generatedToken,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('success');
+      expect(res.body.data.email).toBe(journeyEmail);
+
+      const dbUser = await getUserProfileByEmail(journeyEmail);
+      expect(dbUser).toBeNull();
+    });
+
+    it('POST /api/v1/user/confirm-deletion should fail with invalid or used token', async () => {
+      const res = await request(app)
+        .post('/api/v1/user/confirm-deletion')
+        .send({
+          email: journeyEmail,
+          deletionToken: 'invalid_token_123',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.status).toBe('error');
     });
   });
 });

@@ -4,6 +4,9 @@ import {
   upsertProfileHandler,
   getProfileHandler,
   deleteProfileHandler,
+  requestDeletionHandler,
+  sendDeletionLinkHandler,
+  confirmDeletionHandler,
   getFavoritesHandler,
   addFavoriteHandler,
   removeFavoriteHandler,
@@ -19,6 +22,13 @@ router.post('/user/profile', upsertProfileHandler);
 router.get('/user/profile', requireAuth, getProfileHandler);
 router.delete('/user/profile', requireAuth, deleteProfileHandler);
 router.delete('/user/account', requireAuth, deleteProfileHandler);
+
+// Multi-step Profile Deletion Journey Endpoints
+router.post('/user/delete-request', requestDeletionHandler);
+router.post('/user/request-deletion', requestDeletionHandler);
+router.post('/user/send-deletion-link', sendDeletionLinkHandler);
+router.post('/user/confirm-deletion', confirmDeletionHandler);
+router.delete('/user/confirm-deletion', confirmDeletionHandler);
 
 // Favorites endpoints (Protected)
 router.get('/user/favorites', requireAuth, getFavoritesHandler);

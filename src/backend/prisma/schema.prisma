@@ -13,12 +13,14 @@ datasource db {
 
 /// Subscribed User Profile for server-side persistence
 model User {
-  id        String         @id @default(uuid())
-  email     String         @unique
-  username  String?        // Optional nickname for personalized greeting
-  createdAt DateTime       @default(now()) @map("created_at")
-  updatedAt DateTime       @updatedAt @map("updated_at")
-  favorites UserFavorite[]
+  id                     String         @id @default(uuid())
+  email                  String         @unique
+  username               String?        // Optional nickname for personalized greeting
+  deletionToken          String?        @map("deletion_token")
+  deletionTokenExpiresAt DateTime?      @map("deletion_token_expires_at")
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+  favorites              UserFavorite[]
 
   @@map("users")
 }

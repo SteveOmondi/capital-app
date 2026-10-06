@@ -338,6 +338,83 @@
         }
       }
     },
+    "/api/v1/user/delete-request": {
+      "post": {
+        "summary": "Step 2 & 3: Request Deletion Token",
+        "description": "App sends account deletion request. Server returns a secure deletion token.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "example": "user@example.com" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deletion token generated successfully."
+          }
+        }
+      }
+    },
+    "/api/v1/user/send-deletion-link": {
+      "post": {
+        "summary": "Step 4 & 5: Send Deep Link to User Email",
+        "description": "App generates deletion deep link with deletion token and sends back to server. Server emails deep link to customer.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "example": "user@example.com" },
+                  "deletionToken": { "type": "string", "example": "del_1234567890abcdef" },
+                  "deletionLink": { "type": "string", "example": "capitalfm://delete-account?token=del_1234567890abcdef" }
+                },
+                "required": ["email", "deletionToken", "deletionLink"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deletion link emailed to customer."
+          }
+        }
+      }
+    },
+    "/api/v1/user/confirm-deletion": {
+      "post": {
+        "summary": "Step 7 & 8: Confirm Account & Data Deletion",
+        "description": "App sends confirmation to backend with deletion token after customer clicks email deep link. Backend deletes customer data completely.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "example": "user@example.com" },
+                  "deletionToken": { "type": "string", "example": "del_1234567890abcdef" }
+                },
+                "required": ["deletionToken"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer data deleted completely."
+          }
+        }
+      }
+    },
     "/api/v1/user/favorites": {
       "get": {
         "summary": "Fetch Persisted Server Favorites",
