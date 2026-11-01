@@ -82,6 +82,15 @@ stages:
               npx tsc --noEmit
             displayName: 'Check TypeScript Compilation'
 
+          # Bring the test database schema in line with prisma/schema.prisma before the tests use it.
+          # Without --accept-data-loss, db push refuses any change that would drop data.
+          - script: |
+              cd src/backend
+              npx prisma db push --skip-generate
+            env:
+              DATABASE_URL: $(DATABASE_URL)
+            displayName: 'Sync Test Database Schema'
+
           - task: DownloadSecureFile@1
             name: firebaseCert
             displayName: 'Download Firebase PKCS12 Certificate'
