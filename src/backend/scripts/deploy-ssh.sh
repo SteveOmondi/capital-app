@@ -12,6 +12,8 @@ DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-latest}"
 DEPLOY_CONTAINERIZED_DB="${DEPLOY_CONTAINERIZED_DB:-true}"
 DEPLOY_CONTAINERIZED_REDIS="${DEPLOY_CONTAINERIZED_REDIS:-true}"
 CLEAR_CACHE_ON_DEPLOY="${CLEAR_CACHE_ON_DEPLOY:-false}"
+# on|true: after a healthy deploy, restore stored article publish dates from the website (one-off data repair).
+BACKFILL_ON_DEPLOY="${BACKFILL_ON_DEPLOY:-off}"
 
 echo "================================================================="
 echo " Starting Capital FM Production Deployment"
@@ -19,6 +21,7 @@ echo " Target Directory: $APP_DIR"
 echo " Image: $DOCKER_IMAGE:$DOCKER_IMAGE_TAG"
 echo " Containerized DB: $DEPLOY_CONTAINERIZED_DB | Containerized Redis: $DEPLOY_CONTAINERIZED_REDIS"
 echo " Clear Cache On Deploy: $CLEAR_CACHE_ON_DEPLOY"
+echo " Backfill On Deploy: $BACKFILL_ON_DEPLOY"
 echo "================================================================="
 
 # 1. Ensure required infrastructure directory structure exists
@@ -147,6 +150,23 @@ if [ "$TRIGGER_ROLLBACK" = "true" ]; then
 
     exit 1
 fi
+
+# 7.5. Restore article publish dates from the website if BACKFILL_ON_DEPLOY is on.
+# Runs only after the new release passed its healthcheck, so the fixed sync code is already live
+# and cannot re-stamp the corrected rows. A failure is reported but does not roll back the release;
+# the job is safe to rerun on the next deploy.
+case "$BACKFILL_ON_DEPLOY" in
+    on|ON|true|TRUE|1)
+        echo "================================================================="
+        echo " BACKFILL_ON_DEPLOY is on. Restoring article publish dates..."
+        echo "================================================================="
+        if docker compose -f "$APP_DIR/docker-compose.prod.yml" exec -T backend_1 node dist/jobs/backfillArticleDates.js --apply; then
+            echo "Article date backfill completed successfully."
+        else
+            echo "WARNING: Article date backfill failed. The release stays deployed; rerun with BACKFILL_ON_DEPLOY=on."
+        fi
+        ;;
+esac
 
 # 8. Mark deployment successful and update last stable tag record
 echo "$DOCKER_IMAGE_TAG" > "$APP_DIR/.last_stable_tag"

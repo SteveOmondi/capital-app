@@ -13,6 +13,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "cache:clear": "ts-node scripts/clear-cache.ts",
+    "backfill:article-dates": "ts-node src/jobs/backfillArticleDates.ts",
     "loadtest": "DISABLE_RATE_LIMIT=true ts-node scripts/loadtest.ts",
     "loadtest:stream": "DISABLE_RATE_LIMIT=true ts-node scripts/loadtest.ts --mode=stream --vus=200 --duration=30",
     "loadtest:mixed": "DISABLE_RATE_LIMIT=true ts-node scripts/loadtest.ts --mode=mixed --vus=100 --duration=30",

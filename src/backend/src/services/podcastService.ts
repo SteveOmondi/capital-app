@@ -78,8 +78,11 @@ export async function getPodcastGroups(): Promise<PodcastGroupDTO[]> {
  * Preserves audio.url including StreamGuys analytics parameters (?awCollectionId=...).
  */
 function transformWpEpisode(ep: any): PodcastEpisode {
-  const pubDateStr = ep.published_at || ep.publishedAt || ep.published || ep.date_gmt || ep.date || new Date().toISOString();
-  const publishedTimestamp = new Date(pubDateStr).getTime() || Date.now();
+  const pubDateStr =
+    ep.published || ep.published_at || ep.publishedAt || (ep.date_gmt ? `${ep.date_gmt}Z` : undefined) || ep.date;
+  const sourceTimestamp = pubDateStr ? new Date(pubDateStr).getTime() : NaN;
+  const publishedAtMissing = !Number.isFinite(sourceTimestamp);
+  const publishedTimestamp = publishedAtMissing ? Date.now() : sourceTimestamp;
 
   const audioUrl = typeof ep.audio === 'object' ? ep.audio?.url || '' : ep.audio || ep.audioUrl || '';
 
@@ -92,6 +95,7 @@ function transformWpEpisode(ep: any): PodcastEpisode {
     publishedAt: new Date(publishedTimestamp).toISOString(),
     publishedTimestamp,
     imageUrl: ep.image || ep.podcast?.image || DEFAULT_IMAGE_URL,
+    ...(publishedAtMissing ? { publishedAtMissing: true } : {}),
   };
 }
 
@@ -158,12 +162,14 @@ async function fetchPodcastsFromUpstreamAndSave(
       publishedAt: new Date(ep.publishedTimestamp),
     }));
 
-    for (const item of data) {
+    for (const [idx, item] of data.entries()) {
       const existing = await prisma.article.findUnique({ where: { id: item.id } });
       if (!existing) {
         await prisma.article.create({ data: item });
       } else {
-        await prisma.article.update({ where: { id: item.id }, data: item });
+        // Keep the stored episode date when the feed carried no real date of its own.
+        const publishedAt = episodes[idx].publishedAtMissing ? existing.publishedAt : item.publishedAt;
+        await prisma.article.update({ where: { id: item.id }, data: { ...item, publishedAt } });
       }
     }
   } catch (_) {}

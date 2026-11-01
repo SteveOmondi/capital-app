@@ -125,12 +125,17 @@ function transformApiArticle(item: any): ArticleDTO {
   const embeddedAuthor = item._embedded && Array.isArray(item._embedded['author']) ? item._embedded['author'][0] : undefined;
   const authorDetails = parseAuthorDetails(item.author, embeddedAuthor);
   const authorName = authorDetails.name || 'Capital Digital';
-  const pubDateStr = item.published_at || item.publishedAt || item.date_gmt || item.date || new Date().toISOString();
-  const publishedAtTimestamp = new Date(pubDateStr).getTime() || Date.now();
+  // capitalfm/v1 sends the post date as `published` (ISO 8601 with offset); the other keys cover wp/v2 and cached DTOs.
+  const pubDateStr =
+    item.published || item.published_at || item.publishedAt || (item.date_gmt ? `${item.date_gmt}Z` : undefined) || item.date;
+  const sourceTimestamp = pubDateStr ? new Date(pubDateStr).getTime() : NaN;
+  const hasSourceDate = Number.isFinite(sourceTimestamp);
+  // The response still needs a date, but a fallback "now" must never be persisted over the website's real date.
+  const publishedAtTimestamp = hasSourceDate ? sourceTimestamp : Date.now();
 
   const categorySlug = item.primary_category?.slug || item.categorySlug || (Array.isArray(item.categories) && item.categories[0]?.slug) || 'news';
 
-  return {
+  const article: ArticleDTO = {
     id: item.id,
     slug: item.slug || `article-${item.id}`,
     title,
@@ -150,7 +155,18 @@ function transformApiArticle(item: any): ArticleDTO {
     share: item.share,
     related: item.related,
   };
+
+  if (!hasSourceDate) {
+    articlesWithoutSourceDate.add(article);
+  }
+  return article;
 }
+
+/**
+ * Articles whose upstream payload had no usable publish date (their publishedAt is a fallback "now").
+ * Tracked out-of-band so the API response shape is unchanged.
+ */
+const articlesWithoutSourceDate = new WeakSet<ArticleDTO>();
 
 /**
  * Syncs posts to PostgreSQL in background for Full-Text Search and local caching.
@@ -182,11 +198,14 @@ async function syncArticlesToPostgres(articles: ArticleDTO[], isFullContent: boo
         const existingContentLen = existing.content?.length || 0;
         const incomingContentLen = article.content?.length || 0;
         const shouldUpdateContent = isFullContent || incomingContentLen >= existingContentLen;
+        // Keep the stored website date when the incoming payload carried no real date of its own.
+        const publishedAt = articlesWithoutSourceDate.has(article) ? existing.publishedAt : data.publishedAt;
 
         await prisma.article.update({
           where: { id: article.id },
           data: {
             ...data,
+            publishedAt,
             content: shouldUpdateContent ? article.content : existing.content,
           },
         });

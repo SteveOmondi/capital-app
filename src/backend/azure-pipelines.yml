@@ -5,6 +5,15 @@
 trigger: none
 pr: none
 
+parameters:
+  - name: backfillOnDeploy
+    displayName: 'Backfill article publish dates after deploy (one-off data repair)'
+    type: string
+    default: 'off'
+    values:
+      - 'off'
+      - 'on'
+
 pool:
   vmImage: 'ubuntu-latest'
 
@@ -251,6 +260,7 @@ stages:
                  DEPLOY_CONTAINERIZED_DB=$(DEPLOY_CONTAINERIZED_DB) \
                  DEPLOY_CONTAINERIZED_REDIS=$(DEPLOY_CONTAINERIZED_REDIS) \
                  CLEAR_CACHE_ON_DEPLOY=$(CLEAR_CACHE_ON_DEPLOY) \
+                 BACKFILL_ON_DEPLOY=${{ parameters.backfillOnDeploy }} \
                  /opt/apps/capital-app/scripts/deploy-ssh.sh"
             displayName: 'Execute SSH Deployment, Healthchecks & Rollback'
 

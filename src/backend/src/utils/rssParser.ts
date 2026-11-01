@@ -10,6 +10,11 @@ export interface PodcastEpisode {
   publishedAt: string;
   publishedTimestamp: number;
   imageUrl?: string;
+  /**
+   * Set when the upstream feed had no usable publish date and publishedAt is a fallback "now".
+   * A stored date must never be overwritten with such a fallback.
+   */
+  publishedAtMissing?: boolean;
 }
 
 export interface PodcastChannel {
@@ -70,8 +75,9 @@ export function parsePodcastRssXml(xmlData: string): PodcastChannel {
     const epImageUrl = item['itunes:image']?.['@_href'] || imageUrl;
 
     // Date parsing
-    const pubDateStr = item.pubDate ? String(item.pubDate) : new Date().toISOString();
-    const publishedTimestamp = new Date(pubDateStr).getTime() || Date.now();
+    const sourceTimestamp = item.pubDate ? new Date(String(item.pubDate)).getTime() : NaN;
+    const publishedAtMissing = !Number.isFinite(sourceTimestamp);
+    const publishedTimestamp = publishedAtMissing ? Date.now() : sourceTimestamp;
 
     return {
       guid,
@@ -82,6 +88,7 @@ export function parsePodcastRssXml(xmlData: string): PodcastChannel {
       publishedAt: new Date(publishedTimestamp).toISOString(),
       publishedTimestamp,
       imageUrl: epImageUrl,
+      ...(publishedAtMissing ? { publishedAtMissing: true } : {}),
     };
   });
 
