@@ -2,7 +2,11 @@ import { Prisma } from '@prisma/client';
 import { config } from '../config';
 import { prisma } from '../config/db';
 import { logger } from '../middlewares/logger';
-import { getSyncGeneration, markSyncComplete, scheduleBackgroundSync } from '../utils/backgroundSync';
+import {
+  getSyncGeneration,
+  markSyncComplete,
+  scheduleBackgroundSync,
+} from '../utils/backgroundSync';
 import {
   clampInt,
   deleteCache,
@@ -13,7 +17,14 @@ import {
   upstreamError,
   writeCache,
 } from '../utils/upstream';
-import { ArticleDTO, AuthorDTO, dbArticleToDTO, hasFullContent, syncArticlesToPostgres, transformApiArticle } from './wordpressService';
+import {
+  ArticleDTO,
+  AuthorDTO,
+  dbArticleToDTO,
+  hasFullContent,
+  syncArticlesToPostgres,
+  transformApiArticle,
+} from './wordpressService';
 
 /**
  * Capital FM Public API v2.4.0 Authors gateway.
@@ -72,11 +83,23 @@ export interface AuthorArticlesResponseDTO {
 const AUTHOR_ORDERBY = new Set(['stories', 'name', 'recent']);
 
 // API doc: /authors list items carry only these fields; stored profiles may hold the full record.
-const AUTHOR_LIST_FIELDS = ['id', 'name', 'slug', 'image', 'story_count', 'latest_story', 'url', 'api_url', 'articles_url'];
+const AUTHOR_LIST_FIELDS = [
+  'id',
+  'name',
+  'slug',
+  'image',
+  'story_count',
+  'latest_story',
+  'url',
+  'api_url',
+  'articles_url',
+];
 
 function toAuthorListItem(profile: Prisma.JsonValue): Record<string, unknown> {
   const record = profile && typeof profile === 'object' ? (profile as Record<string, unknown>) : {};
-  return Object.fromEntries(AUTHOR_LIST_FIELDS.filter((key) => key in record).map((key) => [key, record[key]]));
+  return Object.fromEntries(
+    AUTHOR_LIST_FIELDS.filter((key) => key in record).map((key) => [key, record[key]]),
+  );
 }
 
 function buildMeta(total: number, page: number, perPage: number): PaginationMetaDTO {
@@ -105,7 +128,10 @@ async function saveAuthorProfiles(records: any[], isFull: boolean): Promise<void
     if (id === undefined || !slug) continue;
     try {
       const existing = await prisma.author.findUnique({ where: { id } });
-      const previous = existing?.profile && typeof existing.profile === 'object' ? (existing.profile as Record<string, unknown>) : {};
+      const previous =
+        existing?.profile && typeof existing.profile === 'object'
+          ? (existing.profile as Record<string, unknown>)
+          : {};
       const data = {
         slug,
         name: typeof record.name === 'string' && record.name ? record.name : slug,
@@ -125,7 +151,11 @@ async function saveAuthorProfiles(records: any[], isFull: boolean): Promise<void
 // Website fetchers (also used by the background re-sync)
 // ---------------------------------------------------------------------------
 
-async function fetchAuthorsPageFromWebsite(params: URLSearchParams, page: number, perPage: number): Promise<AuthorListResponseDTO> {
+async function fetchAuthorsPageFromWebsite(
+  params: URLSearchParams,
+  page: number,
+  perPage: number,
+): Promise<AuthorListResponseDTO> {
   const url = `${config.services.capitalFmApiBaseUrl}/authors?${params.toString()}`;
   const response = await fetchUpstream(url);
   if (!response.ok) {
@@ -148,7 +178,11 @@ async function syncAuthorDirectory(): Promise<void> {
   const seenIds = new Set<number>();
   for (let page = 1; page <= totalPages; page++) {
     if (page > DIRECTORY_SYNC_MAX_PAGES) return;
-    const params = new URLSearchParams({ page: String(page), per_page: String(DIRECTORY_SYNC_PAGE_SIZE), orderby: 'name' });
+    const params = new URLSearchParams({
+      page: String(page),
+      per_page: String(DIRECTORY_SYNC_PAGE_SIZE),
+      orderby: 'name',
+    });
     const result = await fetchAuthorsPageFromWebsite(params, page, DIRECTORY_SYNC_PAGE_SIZE);
     for (const item of result.data) {
       const id = toInt(item?.id);
@@ -207,7 +241,11 @@ async function fetchAuthorArticlesFromWebsite(
     await saveAuthorProfiles([author], true);
   }
 
-  return { author, articles, meta: readUpstreamPagination(json, response, articles.length, page, perPage) };
+  return {
+    author,
+    articles,
+    meta: readUpstreamPagination(json, response, articles.length, page, perPage),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +266,8 @@ export async function getAuthors(query: AuthorListQuery): Promise<AuthorListResp
 
   const generation = await getSyncGeneration(DIRECTORY_SYNC_KEY);
   const cacheKey = `authors:list:${generation ?? 'unsynced'}:page:${page}:limit:${perPage}:orderby:${orderby}:search:${search || ''}`;
-  const resync = () => scheduleBackgroundSync(DIRECTORY_SYNC_KEY, DIRECTORY_RESYNC_MS, syncAuthorDirectory);
+  const resync = () =>
+    scheduleBackgroundSync(DIRECTORY_SYNC_KEY, DIRECTORY_RESYNC_MS, syncAuthorDirectory);
 
   const cached = await readCache<AuthorListResponseDTO>(cacheKey);
   if (cached) {
@@ -254,13 +293,18 @@ export async function getAuthors(query: AuthorListQuery): Promise<AuthorListResp
     resync();
     return result;
   } catch (error) {
-    const stored = generation ? null : await readAuthorsFromPostgres(search, orderby, page, perPage);
+    const stored = generation
+      ? null
+      : await readAuthorsFromPostgres(search, orderby, page, perPage);
     if (stored) {
       logger.warn({ error }, 'Website unavailable; serving stored authors from PostgreSQL');
       resync();
       return stored;
     }
-    logger.warn({ error }, 'Failed to fetch authors from Capital FM API. Returning empty author list.');
+    logger.warn(
+      { error },
+      'Failed to fetch authors from Capital FM API. Returning empty author list.',
+    );
     return { data: [], meta: { total: 0, total_pages: 0, page, per_page: perPage } };
   }
 }
@@ -292,7 +336,12 @@ async function readAuthorsFromPostgres(
       prisma.author.count({ where }),
     ]);
 
-    return total > 0 ? { data: rows.map((row) => toAuthorListItem(row.profile)), meta: buildMeta(total, page, perPage) } : null;
+    return total > 0
+      ? {
+          data: rows.map((row) => toAuthorListItem(row.profile)),
+          meta: buildMeta(total, page, perPage),
+        }
+      : null;
   } catch (dbError) {
     logger.warn({ dbError }, 'PostgreSQL author lookup skipped or failed');
     return null;
@@ -312,7 +361,9 @@ export async function getAuthorByIdOrSlug(idOrSlug: string): Promise<any | null>
         writeCache(cacheKey, AUTHOR_PROFILE_TTL_SECONDS, author);
       } else {
         // The website no longer lists this author (no published story): stop serving the stored copy.
-        await prisma.author.deleteMany({ where: authorLookup(idOrSlug) as Prisma.AuthorWhereInput });
+        await prisma.author.deleteMany({
+          where: authorLookup(idOrSlug) as Prisma.AuthorWhereInput,
+        });
         deleteCache(cacheKey);
       }
     });
@@ -344,7 +395,10 @@ export async function getAuthorByIdOrSlug(idOrSlug: string): Promise<any | null>
   } catch (error) {
     // Website down and only a directory (partial) record stored: serve it rather than fail.
     if (stored) {
-      logger.warn({ error, idOrSlug }, 'Website unavailable; serving stored partial author profile');
+      logger.warn(
+        { error, idOrSlug },
+        'Website unavailable; serving stored partial author profile',
+      );
       return stored.profile;
     }
     throw error;
@@ -358,7 +412,10 @@ export async function getAuthorByIdOrSlug(idOrSlug: string): Promise<any | null>
  * author's whole archive, and for `fields=full` only rows with full bodies. Otherwise the website
  * answers and the stored rows are the downtime fallback. Returns null when the author is unknown.
  */
-export async function getAuthorArticles(idOrSlug: string, query: AuthorArticlesQuery): Promise<AuthorArticlesResponseDTO | null> {
+export async function getAuthorArticles(
+  idOrSlug: string,
+  query: AuthorArticlesQuery,
+): Promise<AuthorArticlesResponseDTO | null> {
   const page = clampInt(query.page, 1, 1, Number.MAX_SAFE_INTEGER);
   const perPage = clampInt(query.per_page, 10, 1, 50);
   const fields = query.fields === 'full' ? 'full' : 'summary';
@@ -394,13 +451,20 @@ export async function getAuthorArticles(idOrSlug: string, query: AuthorArticlesQ
     const where: Prisma.ArticleWhereInput = { OR: byline };
 
     const [rows, count] = await Promise.all([
-      prisma.article.findMany({ where, orderBy: { publishedAt: 'desc' }, skip: (page - 1) * perPage, take: perPage }),
+      prisma.article.findMany({
+        where,
+        orderBy: { publishedAt: 'desc' },
+        skip: (page - 1) * perPage,
+        take: perPage,
+      }),
       prisma.article.count({ where }),
     ]);
 
     if (rows.length > 0) {
       const articles = rows.map(dbArticleToDTO);
-      const bylineMatch = articles[0].authors?.find((a: AuthorDTO) => a.id === authorId || a.slug === authorSlug);
+      const bylineMatch = articles[0].authors?.find(
+        (a: AuthorDTO) => a.id === authorId || a.slug === authorSlug,
+      );
       const storyCount = storedAuthor?.storyCount ?? 0;
       const holdsWholeArchive = storyCount > 0 && count >= storyCount;
       stored = {
@@ -409,10 +473,14 @@ export async function getAuthorArticles(idOrSlug: string, query: AuthorArticlesQ
         meta: buildMeta(Math.max(count, storyCount), page, perPage),
       };
       storedIsComplete =
-        (rows.length === perPage || holdsWholeArchive) && (fields === 'summary' || rows.every(hasFullContent));
+        (rows.length === perPage || holdsWholeArchive) &&
+        (fields === 'summary' || rows.every(hasFullContent));
     }
   } catch (dbError) {
-    logger.warn({ dbError, idOrSlug }, 'PostgreSQL author articles lookup skipped or failed, fetching from website');
+    logger.warn(
+      { dbError, idOrSlug },
+      'PostgreSQL author articles lookup skipped or failed, fetching from website',
+    );
   }
 
   if (stored && storedIsComplete) {
@@ -429,7 +497,10 @@ export async function getAuthorArticles(idOrSlug: string, query: AuthorArticlesQ
     return result;
   } catch (error) {
     if (stored) {
-      logger.warn({ error, idOrSlug }, 'Website unavailable; serving stored author stories from PostgreSQL');
+      logger.warn(
+        { error, idOrSlug },
+        'Website unavailable; serving stored author stories from PostgreSQL',
+      );
       return stored;
     }
     throw error;

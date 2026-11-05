@@ -11,13 +11,18 @@ export function upstreamError(message: string): Error & { statusCode: number } {
  * Fetches a Capital FM API URL with a timeout, so a hanging website never hangs the gateway.
  * Network failures and timeouts become 502 errors; HTTP statuses are returned to the caller.
  */
-export async function fetchUpstream(url: string, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<Response> {
+export async function fetchUpstream(
+  url: string,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { signal: controller.signal });
   } catch (error) {
-    throw upstreamError(`Capital FM API unreachable: ${(error as Error)?.message || 'fetch failed'}`);
+    throw upstreamError(
+      `Capital FM API unreachable: ${(error as Error)?.message || 'fetch failed'}`,
+    );
   } finally {
     clearTimeout(timeoutId);
   }
@@ -68,7 +73,12 @@ export function deleteCache(key: string): void {
   redis.del(key).catch(() => {});
 }
 
-export function clampInt(value: number | undefined, fallback: number, min: number, max: number): number {
+export function clampInt(
+  value: number | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   const n = Number.isFinite(value) ? Math.trunc(value as number) : fallback;
   return Math.min(max, Math.max(min, n));
 }

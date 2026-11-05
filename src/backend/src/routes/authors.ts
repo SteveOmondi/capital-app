@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { getAuthorsHandler, getAuthorDetailHandler, getAuthorArticlesHandler } from '../controllers/authorController';
+import {
+  getAuthorsHandler,
+  getAuthorDetailHandler,
+  getAuthorArticlesHandler,
+} from '../controllers/authorController';
 
 const router = Router();
 

@@ -1,5 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { getAuthors, getAuthorByIdOrSlug, getAuthorArticles, AuthorListQuery } from '../services/authorService';
+import {
+  getAuthors,
+  getAuthorByIdOrSlug,
+  getAuthorArticles,
+  AuthorListQuery,
+} from '../services/authorService';
 
 function parseIntParam(value: unknown): number | undefined {
   if (value === undefined) return undefined;
@@ -7,11 +12,17 @@ function parseIntParam(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-export async function getAuthorsHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getAuthorsHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
     const query: AuthorListQuery = {
       search: req.query.search ? String(req.query.search) : undefined,
-      orderby: req.query.orderby ? (String(req.query.orderby) as AuthorListQuery['orderby']) : undefined,
+      orderby: req.query.orderby
+        ? (String(req.query.orderby) as AuthorListQuery['orderby'])
+        : undefined,
       page: parseIntParam(req.query.page),
       per_page: parseIntParam(req.query.per_page ?? req.query.limit),
     };
@@ -28,7 +39,11 @@ export async function getAuthorsHandler(req: Request, res: Response, next: NextF
   }
 }
 
-export async function getAuthorDetailHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getAuthorDetailHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
     const { idOrSlug } = req.params;
     const author = await getAuthorByIdOrSlug(idOrSlug);
@@ -50,7 +65,11 @@ export async function getAuthorDetailHandler(req: Request, res: Response, next: 
   }
 }
 
-export async function getAuthorArticlesHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getAuthorArticlesHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
     const { idOrSlug } = req.params;
     const result = await getAuthorArticles(idOrSlug, {
