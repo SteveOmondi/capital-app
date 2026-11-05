@@ -28,6 +28,14 @@ const ROSTER_SYNC_PAGE_SIZE = 100;
 const ROSTER_SYNC_MAX_PAGES = 10;
 const ROSTER_SYNC_KEY = 'presenters:roster';
 
+// API doc: `?fields=full` inlines these for every presenter; summary lists omit them.
+const PRESENTER_FULL_ONLY_FIELDS = ['bio', 'shows', 'articles'];
+
+function toPresenterListItem(profile: Prisma.JsonValue, fields: 'summary' | 'full'): Prisma.JsonValue {
+  if (fields === 'full' || !profile || typeof profile !== 'object' || Array.isArray(profile)) return profile;
+  return Object.fromEntries(Object.entries(profile).filter(([key]) => !PRESENTER_FULL_ONLY_FIELDS.includes(key)));
+}
+
 function presenterLookup(idOrSlug: string): Prisma.PresenterWhereUniqueInput {
   return /^\d+$/.test(idOrSlug) ? { id: parseInt(idOrSlug, 10) } : { slug: idOrSlug };
 }
@@ -88,19 +96,25 @@ async function fetchPresentersFromWebsite(
 
 /**
  * Re-syncs the full presenter roster (with bios, shows and articles) from the website into Postgres.
- * Only a sync that stored every page drops presenters the website no longer lists and marks the
+ * Only a sync that stored every page and saw as many presenters as the website reports drops presenters the website no longer lists and marks the
  * roster complete, which lets list requests be answered from Postgres.
  */
 async function syncPresenterRoster(): Promise<void> {
   let totalPages = 1;
-  const seenIds: number[] = [];
+  let total = 0;
+  const seenIds = new Set<number>();
   for (let page = 1; page <= totalPages; page++) {
     if (page > ROSTER_SYNC_MAX_PAGES) return;
     const result = await fetchPresentersFromWebsite(page, ROSTER_SYNC_PAGE_SIZE, 'full');
-    seenIds.push(...result.items.map((item) => toInt(item?.id)).filter((id): id is number => id !== undefined));
+    for (const item of result.items) {
+      const id = toInt(item?.id);
+      if (id !== undefined) seenIds.add(id);
+    }
+    total = Number(result.total) || 0;
     totalPages = result.totalPages || 1;
   }
-  await prisma.presenter.deleteMany({ where: { id: { notIn: seenIds } } });
+  if (seenIds.size < total) return;
+  await prisma.presenter.deleteMany({ where: { id: { notIn: [...seenIds] } } });
   await markSyncComplete(ROSTER_SYNC_KEY);
 }
 
@@ -131,7 +145,7 @@ async function readPresentersFromPostgres(
 
     // A `fields=full` request needs full records for every presenter on the page.
     if (total > 0 && (fields === 'summary' || rows.every((row) => row.isFull))) {
-      return { data: rows.map((row) => row.profile), meta: { total, page, per_page: perPage } };
+      return { data: rows.map((row) => toPresenterListItem(row.profile, fields)), meta: { total, page, per_page: perPage } };
     }
   } catch (dbError) {
     logger.warn({ dbError }, 'PostgreSQL presenter lookup skipped or failed');

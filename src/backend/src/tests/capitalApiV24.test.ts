@@ -495,6 +495,71 @@ describe('Postgres-first reads with background re-sync', () => {
     expect(res.body.meta.total).toBe(1100);
   });
 
+  it('pages the directory sync by name and keeps stored authors when paging returned fewer than the website total', async () => {
+    // Page 2 repeats author 2 (a shifted page boundary), so author 3 was never seen.
+    routes['/authors?page=1&per_page=100'] = { body: { meta: { total: 3, total_pages: 2 }, data: [{ id: 1, slug: 'a' }, { id: 2, slug: 'b' }] } };
+    routes['/authors?page=2&per_page=100'] = { body: { meta: { total: 3, total_pages: 2 }, data: [{ id: 2, slug: 'b' }] } };
+    routes['/authors?page=1&per_page=20'] = { body: { meta: { total: 3, total_pages: 1 }, data: [] } };
+
+    await request(app).get('/api/v1/authors');
+    await flushBackground();
+
+    const syncUrls = fetchMock.mock.calls.map((c) => new URL(String(c[0]))).filter((u) => u.searchParams.get('per_page') === '100');
+    expect(syncUrls.map((u) => u.searchParams.get('orderby'))).toEqual(['name', 'name']);
+    expect(db.author.deleteMany).not.toHaveBeenCalled();
+
+    db.author.findMany.mockResolvedValue([{ id: 1, profile: { id: 1, slug: 'a' } }]);
+    db.author.count.mockResolvedValue(1);
+    fetchMock.mockClear();
+    await request(app).get('/api/v1/authors');
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('returns only the documented list fields for authors served from Postgres', async () => {
+    routes['/authors?'] = { body: { meta: { total: 1, total_pages: 1 }, data: [{ id: 42, slug: 'anne-mwaura' }] } };
+    await request(app).get('/api/v1/authors');
+    await flushBackground();
+    db.author.findMany.mockResolvedValue([
+      { id: 42, profile: { ...coAuthor, story_count: 12, latest_story: '2026-11-05T09:12:00+03:00', articles_url: `${BASE}/authors/42/articles`, website: null } },
+    ]);
+    db.author.count.mockResolvedValue(1);
+    fetchMock.mockClear();
+
+    const res = await request(app).get('/api/v1/authors');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.body.data).toEqual([
+      {
+        id: 42,
+        name: 'Anne Mwaura',
+        slug: 'anne-mwaura',
+        image: 'https://capitalfm.africa/anne.jpg',
+        story_count: 12,
+        latest_story: '2026-11-05T09:12:00+03:00',
+        url: 'https://capitalfm.africa/author/anne-mwaura/',
+        api_url: `${BASE}/authors/42`,
+        articles_url: `${BASE}/authors/42/articles`,
+      },
+    ]);
+  });
+
+  it('omits bio, shows and articles from summary presenter lists served from Postgres but keeps them for fields=full', async () => {
+    routes['/presenters?'] = { body: { meta: { total: 1, total_pages: 1 }, data: [{ id: 1, slug: 'adnan' }] } };
+    await request(app).get('/api/v1/presenters');
+    await flushBackground();
+    const full = { id: 1, slug: 'adnan', name: 'Adnan', role: 'Host', bio: { html: '<p>Hi</p>', text: 'Hi' }, shows: [{ show: 'The Hype' }], articles: [] };
+    db.presenter.findMany.mockResolvedValue([{ id: 1, isFull: true, profile: full }]);
+    db.presenter.count.mockResolvedValue(1);
+    fetchMock.mockClear();
+
+    const summary = await request(app).get('/api/v1/presenters');
+    const fullList = await request(app).get('/api/v1/presenters?fields=full');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(summary.body.data).toEqual([{ id: 1, slug: 'adnan', name: 'Adnan', role: 'Host' }]);
+    expect(fullList.body.data).toEqual([full]);
+  });
+
   it('fetches an author page from the website when Postgres holds only part of the archive', async () => {
     db.author.findUnique.mockResolvedValue({ id: 42, slug: 'anne-mwaura', storyCount: 1840, profile: coAuthor });
     db.article.findMany.mockResolvedValue([storedArticleRow]);

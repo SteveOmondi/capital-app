@@ -71,6 +71,14 @@ export interface AuthorArticlesResponseDTO {
 
 const AUTHOR_ORDERBY = new Set(['stories', 'name', 'recent']);
 
+// API doc: /authors list items carry only these fields; stored profiles may hold the full record.
+const AUTHOR_LIST_FIELDS = ['id', 'name', 'slug', 'image', 'story_count', 'latest_story', 'url', 'api_url', 'articles_url'];
+
+function toAuthorListItem(profile: Prisma.JsonValue): Record<string, unknown> {
+  const record = profile && typeof profile === 'object' ? (profile as Record<string, unknown>) : {};
+  return Object.fromEntries(AUTHOR_LIST_FIELDS.filter((key) => key in record).map((key) => [key, record[key]]));
+}
+
 function buildMeta(total: number, page: number, perPage: number): PaginationMetaDTO {
   return { total, total_pages: Math.ceil(total / perPage), page, per_page: perPage };
 }
@@ -130,21 +138,27 @@ async function fetchAuthorsPageFromWebsite(params: URLSearchParams, page: number
 }
 
 /**
- * Re-syncs the whole author directory from the website into Postgres. Only a sync that stored every
- * page drops authors the website no longer lists and marks the directory complete, which lets list
+ * Re-syncs the whole author directory from the website into Postgres, in name order so paging is
+ * stable. Only a sync that stored every page and saw as many authors as the website reports drops authors the website no longer lists and marks the directory complete, which lets list
  * requests be answered from Postgres.
  */
 async function syncAuthorDirectory(): Promise<void> {
   let totalPages = 1;
-  const seenIds: number[] = [];
+  let total = 0;
+  const seenIds = new Set<number>();
   for (let page = 1; page <= totalPages; page++) {
     if (page > DIRECTORY_SYNC_MAX_PAGES) return;
-    const params = new URLSearchParams({ page: String(page), per_page: String(DIRECTORY_SYNC_PAGE_SIZE) });
+    const params = new URLSearchParams({ page: String(page), per_page: String(DIRECTORY_SYNC_PAGE_SIZE), orderby: 'name' });
     const result = await fetchAuthorsPageFromWebsite(params, page, DIRECTORY_SYNC_PAGE_SIZE);
-    seenIds.push(...result.data.map((item) => toInt(item?.id)).filter((id): id is number => id !== undefined));
+    for (const item of result.data) {
+      const id = toInt(item?.id);
+      if (id !== undefined) seenIds.add(id);
+    }
+    total = result.meta.total;
     totalPages = result.meta.total_pages || 1;
   }
-  await prisma.author.deleteMany({ where: { id: { notIn: seenIds } } });
+  if (seenIds.size < total) return;
+  await prisma.author.deleteMany({ where: { id: { notIn: [...seenIds] } } });
   await markSyncComplete(DIRECTORY_SYNC_KEY);
 }
 
@@ -278,7 +292,7 @@ async function readAuthorsFromPostgres(
       prisma.author.count({ where }),
     ]);
 
-    return total > 0 ? { data: rows.map((row) => row.profile), meta: buildMeta(total, page, perPage) } : null;
+    return total > 0 ? { data: rows.map((row) => toAuthorListItem(row.profile)), meta: buildMeta(total, page, perPage) } : null;
   } catch (dbError) {
     logger.warn({ dbError }, 'PostgreSQL author lookup skipped or failed');
     return null;
