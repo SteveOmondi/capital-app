@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { config } from '../config';
 import { prisma } from '../config/db';
 import { logger } from '../middlewares/logger';
-import { scheduleBackgroundSync } from '../utils/backgroundSync';
+import { getSyncGeneration, markSyncComplete, scheduleBackgroundSync } from '../utils/backgroundSync';
 import { clampInt, deleteCache, fetchUpstream, readCache, toInt, upstreamError, writeCache } from '../utils/upstream';
 
 export interface PresenterQuery {
@@ -26,6 +26,7 @@ const PRESENTER_TTL_SECONDS = 900;
 const PRESENTER_RESYNC_MS = PRESENTER_TTL_SECONDS * 1000;
 const ROSTER_SYNC_PAGE_SIZE = 100;
 const ROSTER_SYNC_MAX_PAGES = 10;
+const ROSTER_SYNC_KEY = 'presenters:roster';
 
 function presenterLookup(idOrSlug: string): Prisma.PresenterWhereUniqueInput {
   return /^\d+$/.test(idOrSlug) ? { id: parseInt(idOrSlug, 10) } : { slug: idOrSlug };
@@ -85,38 +86,28 @@ async function fetchPresentersFromWebsite(
   return { items, total, totalPages };
 }
 
-/** Re-syncs the full presenter roster (with bios, shows and articles) from the website into Postgres. */
+/**
+ * Re-syncs the full presenter roster (with bios, shows and articles) from the website into Postgres.
+ * Only a sync that stored every page marks the roster complete, which lets list requests be answered
+ * from Postgres.
+ */
 async function syncPresenterRoster(): Promise<void> {
   let totalPages = 1;
-  for (let page = 1; page <= Math.min(totalPages, ROSTER_SYNC_MAX_PAGES); page++) {
+  for (let page = 1; page <= totalPages; page++) {
+    if (page > ROSTER_SYNC_MAX_PAGES) return;
     const result = await fetchPresentersFromWebsite(page, ROSTER_SYNC_PAGE_SIZE, 'full');
     totalPages = result.totalPages || 1;
   }
+  await markSyncComplete(ROSTER_SYNC_KEY);
 }
 
-/**
- * Fetches on-air presenters. Redis (15 min) → Postgres → website; the roster is re-synced from the
- * website in the background every 15 minutes while the server is active.
- * Handles empty list `[]` gracefully while profiles are being entered in wp-admin.
- */
-export async function getPresenters(query: PresenterQuery): Promise<PresenterListResponseDTO> {
-  const page = clampInt(query.page, 1, 1, Number.MAX_SAFE_INTEGER);
-  const perPage = clampInt(query.per_page, 20, 1, 100);
-  const fields = query.fields === 'full' ? 'full' : 'summary';
-  const search = query.search?.trim();
-
-  const cacheKey = `presenters:list:${fields}:page:${page}:limit:${perPage}:search:${search || ''}`;
-  const resync = () => scheduleBackgroundSync('presenters:roster', PRESENTER_RESYNC_MS, syncPresenterRoster);
-
-  const cached = await readCache<PresenterListResponseDTO>(cacheKey);
-  if (cached) {
-    resync();
-    return cached;
-  }
-
+async function readPresentersFromPostgres(
+  fields: 'summary' | 'full',
+  page: number,
+  perPage: number,
+  search?: string,
+): Promise<PresenterListResponseDTO | null> {
   try {
-    // Postgres search covers name and slug; the website also matches role, tagline and aliases,
-    // so a search Postgres cannot answer falls through to the website.
     const where: Prisma.PresenterWhereInput = search
       ? {
           OR: [
@@ -137,21 +128,60 @@ export async function getPresenters(query: PresenterQuery): Promise<PresenterLis
 
     // A `fields=full` request needs full records for every presenter on the page.
     if (total > 0 && (fields === 'summary' || rows.every((row) => row.isFull))) {
-      const result: PresenterListResponseDTO = { data: rows.map((row) => row.profile), meta: { total, page, per_page: perPage } };
-      writeCache(cacheKey, PRESENTER_TTL_SECONDS, result);
-      resync();
-      return result;
+      return { data: rows.map((row) => row.profile), meta: { total, page, per_page: perPage } };
     }
   } catch (dbError) {
-    logger.warn({ dbError }, 'PostgreSQL presenter lookup skipped or failed, fetching from website');
+    logger.warn({ dbError }, 'PostgreSQL presenter lookup skipped or failed');
+  }
+  return null;
+}
+
+/**
+ * Fetches on-air presenters. Redis (15 min) → Postgres → website once a full roster sync has
+ * completed; the roster is re-synced from the website in the background every 15 minutes while the
+ * server is active. Before that sync, and for searches (the website also matches role, tagline and
+ * aliases, Postgres only name and slug), the website answers first and Postgres is the downtime fallback.
+ * Handles empty list `[]` gracefully while profiles are being entered in wp-admin.
+ */
+export async function getPresenters(query: PresenterQuery): Promise<PresenterListResponseDTO> {
+  const page = clampInt(query.page, 1, 1, Number.MAX_SAFE_INTEGER);
+  const perPage = clampInt(query.per_page, 20, 1, 100);
+  const fields = query.fields === 'full' ? 'full' : 'summary';
+  const search = query.search?.trim();
+
+  const generation = await getSyncGeneration(ROSTER_SYNC_KEY);
+  const cacheKey = `presenters:list:${generation ?? 'unsynced'}:${fields}:page:${page}:limit:${perPage}:search:${search || ''}`;
+  const resync = () => scheduleBackgroundSync(ROSTER_SYNC_KEY, PRESENTER_RESYNC_MS, syncPresenterRoster);
+
+  const cached = await readCache<PresenterListResponseDTO>(cacheKey);
+  if (cached) {
+    resync();
+    return cached;
+  }
+
+  const postgresFirst = generation !== null && !search;
+  if (postgresFirst) {
+    const stored = await readPresentersFromPostgres(fields, page, perPage);
+    if (stored) {
+      writeCache(cacheKey, PRESENTER_TTL_SECONDS, stored);
+      resync();
+      return stored;
+    }
   }
 
   try {
     const { items, total } = await fetchPresentersFromWebsite(page, perPage, fields, search);
     const result: PresenterListResponseDTO = { data: items, meta: { total, page, per_page: perPage } };
     writeCache(cacheKey, PRESENTER_TTL_SECONDS, result);
+    resync();
     return result;
   } catch (error) {
+    const stored = postgresFirst ? null : await readPresentersFromPostgres(fields, page, perPage, search);
+    if (stored) {
+      logger.warn({ error }, 'Website unavailable; serving stored presenters from PostgreSQL');
+      resync();
+      return stored;
+    }
     logger.warn({ error }, 'Failed to fetch presenters from Capital FM API. Returning empty presenter list.');
     return {
       data: [],

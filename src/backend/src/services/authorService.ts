@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { config } from '../config';
 import { prisma } from '../config/db';
 import { logger } from '../middlewares/logger';
-import { scheduleBackgroundSync } from '../utils/backgroundSync';
+import { getSyncGeneration, markSyncComplete, scheduleBackgroundSync } from '../utils/backgroundSync';
 import {
   clampInt,
   deleteCache,
@@ -13,7 +13,7 @@ import {
   upstreamError,
   writeCache,
 } from '../utils/upstream';
-import { ArticleDTO, AuthorDTO, dbArticleToDTO, syncArticlesToPostgres, transformApiArticle } from './wordpressService';
+import { ArticleDTO, AuthorDTO, dbArticleToDTO, hasFullContent, syncArticlesToPostgres, transformApiArticle } from './wordpressService';
 
 /**
  * Capital FM Public API v2.4.0 Authors gateway.
@@ -36,6 +36,7 @@ const PROFILE_RESYNC_MS = AUTHOR_PROFILE_TTL_SECONDS * 1000;
 const ARTICLES_RESYNC_MS = AUTHOR_ARTICLES_TTL_SECONDS * 1000;
 const DIRECTORY_SYNC_PAGE_SIZE = 100;
 const DIRECTORY_SYNC_MAX_PAGES = 50;
+const DIRECTORY_SYNC_KEY = 'authors:directory';
 
 export interface AuthorListQuery {
   search?: string;
@@ -128,14 +129,19 @@ async function fetchAuthorsPageFromWebsite(params: URLSearchParams, page: number
   return { data: items, meta: readUpstreamPagination(json, response, items.length, page, perPage) };
 }
 
-/** Re-syncs the whole author directory from the website into Postgres. */
+/**
+ * Re-syncs the whole author directory from the website into Postgres. Only a sync that stored every
+ * page marks the directory complete, which lets list requests be answered from Postgres.
+ */
 async function syncAuthorDirectory(): Promise<void> {
   let totalPages = 1;
-  for (let page = 1; page <= Math.min(totalPages, DIRECTORY_SYNC_MAX_PAGES); page++) {
+  for (let page = 1; page <= totalPages; page++) {
+    if (page > DIRECTORY_SYNC_MAX_PAGES) return;
     const params = new URLSearchParams({ page: String(page), per_page: String(DIRECTORY_SYNC_PAGE_SIZE) });
     const result = await fetchAuthorsPageFromWebsite(params, page, DIRECTORY_SYNC_PAGE_SIZE);
     totalPages = result.meta.total_pages || 1;
   }
+  await markSyncComplete(DIRECTORY_SYNC_KEY);
 }
 
 /** Returns the full profile, or null when the website reports `cfm_author_not_found`. */
@@ -192,7 +198,9 @@ async function fetchAuthorArticlesFromWebsite(
 
 /**
  * Lists every author with at least one published story (main author or co-author).
- * Redis (15 min) → Postgres → website; the directory is re-synced in the background every 15 minutes.
+ * Redis (15 min) → Postgres → website once a full directory sync has completed; before that, rows
+ * stored by single-author lookups are not a directory, so the website answers first and Postgres is
+ * only the downtime fallback. The directory is re-synced in the background every 15 minutes.
  */
 export async function getAuthors(query: AuthorListQuery): Promise<AuthorListResponseDTO> {
   const page = clampInt(query.page, 1, 1, Number.MAX_SAFE_INTEGER);
@@ -200,8 +208,9 @@ export async function getAuthors(query: AuthorListQuery): Promise<AuthorListResp
   const search = query.search?.trim();
   const orderby = query.orderby && AUTHOR_ORDERBY.has(query.orderby) ? query.orderby : 'stories';
 
-  const cacheKey = `authors:list:page:${page}:limit:${perPage}:orderby:${orderby}:search:${search || ''}`;
-  const resync = () => scheduleBackgroundSync('authors:directory', DIRECTORY_RESYNC_MS, syncAuthorDirectory);
+  const generation = await getSyncGeneration(DIRECTORY_SYNC_KEY);
+  const cacheKey = `authors:list:${generation ?? 'unsynced'}:page:${page}:limit:${perPage}:orderby:${orderby}:search:${search || ''}`;
+  const resync = () => scheduleBackgroundSync(DIRECTORY_SYNC_KEY, DIRECTORY_RESYNC_MS, syncAuthorDirectory);
 
   const cached = await readCache<AuthorListResponseDTO>(cacheKey);
   if (cached) {
@@ -209,6 +218,41 @@ export async function getAuthors(query: AuthorListQuery): Promise<AuthorListResp
     return cached;
   }
 
+  if (generation) {
+    const stored = await readAuthorsFromPostgres(search, orderby, page, perPage);
+    if (stored) {
+      writeCache(cacheKey, AUTHOR_PROFILE_TTL_SECONDS, stored);
+      resync();
+      return stored;
+    }
+  }
+
+  const params = new URLSearchParams({ page: String(page), per_page: String(perPage), orderby });
+  if (search) params.set('search', search);
+
+  try {
+    const result = await fetchAuthorsPageFromWebsite(params, page, perPage);
+    writeCache(cacheKey, AUTHOR_PROFILE_TTL_SECONDS, result);
+    resync();
+    return result;
+  } catch (error) {
+    const stored = generation ? null : await readAuthorsFromPostgres(search, orderby, page, perPage);
+    if (stored) {
+      logger.warn({ error }, 'Website unavailable; serving stored authors from PostgreSQL');
+      resync();
+      return stored;
+    }
+    logger.warn({ error }, 'Failed to fetch authors from Capital FM API. Returning empty author list.');
+    return { data: [], meta: { total: 0, total_pages: 0, page, per_page: perPage } };
+  }
+}
+
+async function readAuthorsFromPostgres(
+  search: string | undefined,
+  orderby: string,
+  page: number,
+  perPage: number,
+): Promise<AuthorListResponseDTO | null> {
   try {
     const where: Prisma.AuthorWhereInput = search
       ? {
@@ -230,26 +274,10 @@ export async function getAuthors(query: AuthorListQuery): Promise<AuthorListResp
       prisma.author.count({ where }),
     ]);
 
-    if (total > 0) {
-      const result: AuthorListResponseDTO = { data: rows.map((row) => row.profile), meta: buildMeta(total, page, perPage) };
-      writeCache(cacheKey, AUTHOR_PROFILE_TTL_SECONDS, result);
-      resync();
-      return result;
-    }
+    return total > 0 ? { data: rows.map((row) => row.profile), meta: buildMeta(total, page, perPage) } : null;
   } catch (dbError) {
-    logger.warn({ dbError }, 'PostgreSQL author lookup skipped or failed, fetching from website');
-  }
-
-  const params = new URLSearchParams({ page: String(page), per_page: String(perPage), orderby });
-  if (search) params.set('search', search);
-
-  try {
-    const result = await fetchAuthorsPageFromWebsite(params, page, perPage);
-    writeCache(cacheKey, AUTHOR_PROFILE_TTL_SECONDS, result);
-    return result;
-  } catch (error) {
-    logger.warn({ error }, 'Failed to fetch authors from Capital FM API. Returning empty author list.');
-    return { data: [], meta: { total: 0, total_pages: 0, page, per_page: perPage } };
+    logger.warn({ dbError }, 'PostgreSQL author lookup skipped or failed');
+    return null;
   }
 }
 
@@ -308,7 +336,9 @@ export async function getAuthorByIdOrSlug(idOrSlug: string): Promise<any | null>
 /**
  * Fetches an author's stories, newest first, including co-written ones.
  * Redis (5 min) → Postgres (articles whose byline includes the author) → website.
- * Returns null when the author is unknown.
+ * Postgres answers first only with a complete page: a full page, or any page once Postgres holds the
+ * author's whole archive, and for `fields=full` only rows with full bodies. Otherwise the website
+ * answers and the stored rows are the downtime fallback. Returns null when the author is unknown.
  */
 export async function getAuthorArticles(idOrSlug: string, query: AuthorArticlesQuery): Promise<AuthorArticlesResponseDTO | null> {
   const page = clampInt(query.page, 1, 1, Number.MAX_SAFE_INTEGER);
@@ -332,6 +362,8 @@ export async function getAuthorArticles(idOrSlug: string, query: AuthorArticlesQ
     return cached;
   }
 
+  let stored: AuthorArticlesResponseDTO | null = null;
+  let storedIsComplete = false;
   try {
     const storedAuthor = await prisma.author.findUnique({ where: authorLookup(idOrSlug) });
     const numericId = /^\d+$/.test(idOrSlug) ? parseInt(idOrSlug, 10) : undefined;
@@ -351,25 +383,37 @@ export async function getAuthorArticles(idOrSlug: string, query: AuthorArticlesQ
     if (rows.length > 0) {
       const articles = rows.map(dbArticleToDTO);
       const bylineMatch = articles[0].authors?.find((a: AuthorDTO) => a.id === authorId || a.slug === authorSlug);
-      // Postgres may hold only part of the archive; the website's story count keeps paging going,
-      // and a page Postgres cannot fill falls through to the website.
-      const total = Math.max(count, storedAuthor?.storyCount ?? 0);
-      const result: AuthorArticlesResponseDTO = {
+      const storyCount = storedAuthor?.storyCount ?? 0;
+      const holdsWholeArchive = storyCount > 0 && count >= storyCount;
+      stored = {
         author: storedAuthor?.profile ?? bylineMatch ?? null,
         articles,
-        meta: buildMeta(total, page, perPage),
+        meta: buildMeta(Math.max(count, storyCount), page, perPage),
       };
-      writeCache(cacheKey, AUTHOR_ARTICLES_TTL_SECONDS, result);
-      resync();
-      return result;
+      storedIsComplete =
+        (rows.length === perPage || holdsWholeArchive) && (fields === 'summary' || rows.every(hasFullContent));
     }
   } catch (dbError) {
     logger.warn({ dbError, idOrSlug }, 'PostgreSQL author articles lookup skipped or failed, fetching from website');
   }
 
-  const result = await fetchAuthorArticlesFromWebsite(idOrSlug, page, perPage, fields);
-  if (result) {
-    writeCache(cacheKey, AUTHOR_ARTICLES_TTL_SECONDS, result);
+  if (stored && storedIsComplete) {
+    writeCache(cacheKey, AUTHOR_ARTICLES_TTL_SECONDS, stored);
+    resync();
+    return stored;
   }
-  return result;
+
+  try {
+    const result = await fetchAuthorArticlesFromWebsite(idOrSlug, page, perPage, fields);
+    if (result) {
+      writeCache(cacheKey, AUTHOR_ARTICLES_TTL_SECONDS, result);
+    }
+    return result;
+  } catch (error) {
+    if (stored) {
+      logger.warn({ error, idOrSlug }, 'Website unavailable; serving stored author stories from PostgreSQL');
+      return stored;
+    }
+    throw error;
+  }
 }

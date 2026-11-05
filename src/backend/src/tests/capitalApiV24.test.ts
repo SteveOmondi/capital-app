@@ -291,21 +291,58 @@ describe('Postgres-first reads with background re-sync', () => {
     publishedAt: new Date('2026-11-05T06:12:00Z'),
   };
 
-  it('serves /authors from Postgres and re-syncs the directory from the website in the background', async () => {
-    db.author.findMany.mockResolvedValue([{ id: 13671, profile: { id: 13671, name: 'Jane Writer', story_count: 1840 } }]);
+  it('answers /authors from the website until a full directory sync completes, then from Postgres', async () => {
+    // Postgres holds one author stored by a profile lookup: that is not the directory.
+    db.author.findMany.mockResolvedValue([{ id: 42, profile: { id: 42, name: 'Anne Mwaura' } }]);
     db.author.count.mockResolvedValue(1);
-    routes['/authors?'] = { body: { meta: { total: 1, total_pages: 1 }, data: [{ id: 13671, slug: 'jane-writer', name: 'Jane Writer', story_count: 1841 }] } };
+    routes['/authors?'] = {
+      body: { meta: { total: 2, total_pages: 1 }, data: [{ id: 13671, slug: 'jane-writer', name: 'Jane Writer' }, { id: 42, slug: 'anne-mwaura', name: 'Anne Mwaura' }] },
+    };
+
+    const first = await request(app).get('/api/v1/authors');
+
+    expect(first.status).toBe(200);
+    expect(first.body.data.map((a: any) => a.id)).toEqual([13671, 42]);
+    expect(first.body.meta).toEqual({ total: 2, total_pages: 1, page: 1, per_page: 20 });
+
+    await flushBackground();
+    const synced = new URL(String(fetchMock.mock.calls[1][0]));
+    expect(synced.searchParams.get('per_page')).toBe('100');
+    expect(db.author.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 13671 } }));
+
+    db.author.findMany.mockResolvedValue([
+      { id: 13671, profile: { id: 13671, name: 'Jane Writer' } },
+      { id: 42, profile: { id: 42, name: 'Anne Mwaura' } },
+    ]);
+    db.author.count.mockResolvedValue(2);
+    fetchMock.mockClear();
+
+    const second = await request(app).get('/api/v1/authors');
+
+    expect(second.status).toBe(200);
+    expect(second.body.data.map((a: any) => a.id)).toEqual([13671, 42]);
+    expect(second.body.meta).toEqual({ total: 2, total_pages: 1, page: 1, per_page: 20 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not mark the directory synced when the background sync fails part-way', async () => {
+    db.author.findMany.mockResolvedValue([{ id: 42, profile: { id: 42, name: 'Anne Mwaura' } }]);
+    db.author.count.mockResolvedValue(1);
+    routes['/authors?page=1&per_page=20'] = { body: { meta: { total: 300, total_pages: 15 }, data: [{ id: 13671, slug: 'jane-writer', name: 'Jane Writer' }] } };
+    routes['/authors?page=1&per_page=100'] = { body: { meta: { total: 300, total_pages: 3 }, data: [{ id: 13671, slug: 'jane-writer' }] } };
+    routes['/authors?page=2&per_page=100'] = { status: 503, body: {} };
+
+    await request(app).get('/api/v1/authors');
+    await flushBackground();
+    resetDb();
+    db.author.findMany.mockResolvedValue([{ id: 42, profile: { id: 42, name: 'Anne Mwaura' } }]);
+    db.author.count.mockResolvedValue(1);
+    fetchMock.mockClear();
 
     const res = await request(app).get('/api/v1/authors');
 
-    expect(res.status).toBe(200);
-    expect(res.body.data).toEqual([{ id: 13671, name: 'Jane Writer', story_count: 1840 }]);
-    expect(res.body.meta).toEqual({ total: 1, total_pages: 1, page: 1, per_page: 20 });
-
-    await flushBackground();
-    const synced = new URL(String(fetchMock.mock.calls[0][0]));
-    expect(synced.searchParams.get('per_page')).toBe('100');
-    expect(db.author.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 13671 } }));
+    expect(res.body.meta.total).toBe(300);
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   it('keeps serving /authors from Postgres while the website is down', async () => {
@@ -394,6 +431,99 @@ describe('Postgres-first reads with background re-sync', () => {
     expect(db.presenter.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 1471508 }, update: expect.objectContaining({ name: 'Anne M.', isFull: true }) }),
     );
+  });
+
+  it('answers /presenters from the website while Postgres holds only presenters seeded by profile lookups', async () => {
+    db.presenter.findMany.mockResolvedValue([{ id: 1471508, isFull: true, profile: { id: 1471508, slug: 'anne-mwaura' } }]);
+    db.presenter.count.mockResolvedValue(1);
+    routes['/presenters?'] = {
+      body: { meta: { total: 2, total_pages: 1 }, data: [{ id: 1, slug: 'adnan', name: 'Adnan' }, { id: 1471508, slug: 'anne-mwaura', name: 'Anne Mwaura' }] },
+    };
+
+    const res = await request(app).get('/api/v1/presenters');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.map((p: any) => p.slug)).toEqual(['adnan', 'anne-mwaura']);
+  });
+
+  it('serves /presenters from Postgres after a full roster sync, but sends searches to the website', async () => {
+    routes['/presenters?'] = { body: { meta: { total: 1, total_pages: 1 }, data: [{ id: 1, slug: 'adnan', name: 'Adnan', role: 'Breakfast host' }] } };
+    await request(app).get('/api/v1/presenters');
+    await flushBackground();
+
+    db.presenter.findMany.mockResolvedValue([{ id: 1, isFull: true, profile: { id: 1, slug: 'adnan', name: 'Adnan' } }]);
+    db.presenter.count.mockResolvedValue(1);
+    fetchMock.mockClear();
+
+    const roster = await request(app).get('/api/v1/presenters');
+    expect(roster.body.data).toEqual([{ id: 1, slug: 'adnan', name: 'Adnan' }]);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // "breakfast" matches the website's role field, which Postgres does not search.
+    db.presenter.findMany.mockResolvedValue([]);
+    db.presenter.count.mockResolvedValue(0);
+    const searched = await request(app).get('/api/v1/presenters?search=breakfast');
+    expect(searched.body.data.map((p: any) => p.slug)).toEqual(['adnan']);
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('search')).toBe('breakfast');
+  });
+
+  it('fetches an author page from the website when Postgres holds only part of the archive', async () => {
+    db.author.findUnique.mockResolvedValue({ id: 42, slug: 'anne-mwaura', storyCount: 1840, profile: coAuthor });
+    db.article.findMany.mockResolvedValue([storedArticleRow]);
+    db.article.count.mockResolvedValue(3);
+    routes['/authors/anne-mwaura/articles'] = {
+      body: { meta: { total: 1840, total_pages: 184, author: coAuthor }, data: [rawArticle(11), rawArticle(12)] },
+    };
+
+    const res = await request(app).get('/api/v1/authors/anne-mwaura/articles?per_page=10');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.articles.map((a: any) => a.id)).toEqual([11, 12]);
+    expect(res.body.meta).toEqual({ total: 1840, total_pages: 184, page: 1, per_page: 10 });
+  });
+
+  it('serves a full author page from Postgres without waiting for the website', async () => {
+    db.author.findUnique.mockResolvedValue({ id: 42, slug: 'anne-mwaura', storyCount: 25, profile: coAuthor });
+    db.article.findMany.mockResolvedValue([storedArticleRow, { ...storedArticleRow, id: 2, slug: 'story-2' }]);
+    db.article.count.mockResolvedValue(20);
+    routes['/authors/anne-mwaura/articles'] = { body: { meta: { total: 25, total_pages: 13, author: coAuthor }, data: [] } };
+
+    const res = await request(app).get('/api/v1/authors/anne-mwaura/articles?per_page=2');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.articles.map((a: any) => a.id)).toEqual([1, 2]);
+    expect(res.body.meta).toEqual({ total: 25, total_pages: 13, page: 1, per_page: 2 });
+  });
+
+  it('serves the short last page from Postgres once it holds the whole archive', async () => {
+    db.author.findUnique.mockResolvedValue({ id: 42, slug: 'anne-mwaura', storyCount: 3, profile: coAuthor });
+    db.article.findMany.mockResolvedValue([storedArticleRow]);
+    db.article.count.mockResolvedValue(3);
+    routes['/authors/anne-mwaura/articles'] = {
+      body: { meta: { total: 3, total_pages: 2, author: coAuthor }, data: [rawArticle(99)] },
+    };
+
+    const res = await request(app).get('/api/v1/authors/anne-mwaura/articles?page=2&per_page=2');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.articles.map((a: any) => a.id)).toEqual([1]);
+    expect(res.body.meta).toEqual({ total: 3, total_pages: 2, page: 2, per_page: 2 });
+  });
+
+  it('fetches fields=full author pages from the website when stored rows hold only excerpts', async () => {
+    db.author.findUnique.mockResolvedValue({ id: 42, slug: 'anne-mwaura', storyCount: 1, profile: coAuthor });
+    db.article.findMany.mockResolvedValue([storedArticleRow]);
+    db.article.count.mockResolvedValue(1);
+    const fullBody = 'Full story body. '.repeat(10);
+    routes['/authors/anne-mwaura/articles'] = {
+      body: { meta: { total: 1, total_pages: 1, author: coAuthor }, data: [{ ...rawArticle(1), content: fullBody }] },
+    };
+
+    const res = await request(app).get('/api/v1/authors/anne-mwaura/articles?fields=full');
+
+    expect(res.status).toBe(200);
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('fields')).toBe('full');
+    expect(res.body.data.articles[0].content).not.toBe('Body');
   });
 
   it('restores stored bylines on /news articles served from Postgres', async () => {

@@ -137,7 +137,7 @@ Every author with at least one published story (as main author **or** co-author)
 
 **List authors**
 - **Endpoint**: `GET /api/v1/authors`
-- **Query Params**: `search` (name or slug, partial), `orderby` (`stories` default, `name`, `recent`), `page` (default: 1), `per_page` (default: 20, max: 100)
+- **Query Params**: `search` (name or slug, partial), `orderby` (`stories` default, `name`, `recent`), `page` (default: 1), `per_page` (default: 20, max: 100; `limit` is accepted as an alias with the same cap)
 - **Response**:
 ```json
 {
@@ -165,7 +165,7 @@ Every author with at least one published story (as main author **or** co-author)
 
 **Author's stories (co-written included)**
 - **Endpoint**: `GET /api/v1/authors/:idOrSlug/articles`
-- **Query Params**: `page` (default: 1), `per_page` (default: 10, max: 50), `fields` (`summary` default, or `full`)
+- **Query Params**: `page` (default: 1), `per_page` (default: 10, max: 50; `limit` is accepted as an alias with the same cap), `fields` (`summary` default, or `full`)
 - Newest first. Articles have the same shape as `/api/v1/news` (including `authors[]`), and `data.author` carries the full profile, so one call fills an author screen. Page with `meta.total_pages`.
 - **Response**:
 ```json

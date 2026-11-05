@@ -211,6 +211,11 @@ function bylineColumns(authors: AuthorDTO[] | undefined): {
   };
 }
 
+/** True when a stored row holds the article body rather than only its list excerpt. */
+export function hasFullContent(item: Pick<DbArticle, 'content' | 'excerpt'>): boolean {
+  return !!item.content && item.content.length > (item.excerpt?.length || 0) + 30;
+}
+
 /**
  * Maps a Postgres article row back to ArticleDTO, restoring the stored byline when present.
  */
@@ -633,11 +638,7 @@ export async function getArticleBySlug(idOrSlug: string): Promise<ArticleDTO | n
     });
 
     if (dbArticle) {
-      const isLikelyFullContent =
-        dbArticle.content &&
-        dbArticle.content.length > (dbArticle.excerpt?.length || 0) + 30;
-
-      if (isLikelyFullContent) {
+      if (hasFullContent(dbArticle)) {
         const article: ArticleDTO = dbArticleToDTO(dbArticle);
 
         // Update Redis content and reset TTL to 900s (15 mins)
