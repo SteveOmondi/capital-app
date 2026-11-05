@@ -334,6 +334,7 @@ describe('Postgres-first reads with background re-sync', () => {
 
     await request(app).get('/api/v1/authors');
     await flushBackground();
+    expect(db.author.deleteMany).not.toHaveBeenCalled();
     resetDb();
     db.author.findMany.mockResolvedValue([{ id: 42, profile: { id: 42, name: 'Anne Mwaura' } }]);
     db.author.count.mockResolvedValue(1);
@@ -465,6 +466,33 @@ describe('Postgres-first reads with background re-sync', () => {
     const searched = await request(app).get('/api/v1/presenters?search=breakfast');
     expect(searched.body.data.map((p: any) => p.slug)).toEqual(['adnan']);
     expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('search')).toBe('breakfast');
+  });
+
+  it('drops presenters the website no longer lists once a roster sync walks every page', async () => {
+    routes['/presenters?page=1&per_page=100'] = {
+      body: { meta: { total: 3, total_pages: 2 }, data: [{ id: 1, slug: 'adnan' }, { id: 2, slug: 'jane' }] },
+    };
+    routes['/presenters?page=2&per_page=100'] = { body: { meta: { total: 3, total_pages: 2 }, data: [{ id: 3, slug: 'neville' }] } };
+    routes['/presenters?page=1&per_page=20'] = { body: { meta: { total: 3, total_pages: 1 }, data: [] } };
+
+    await request(app).get('/api/v1/presenters');
+    await flushBackground();
+
+    expect(db.presenter.deleteMany).toHaveBeenCalledWith({ where: { id: { notIn: [1, 2, 3] } } });
+  });
+
+  it('keeps stored presenters when the roster is larger than the sync walks', async () => {
+    routes['/presenters?'] = { body: { meta: { total: 1100, total_pages: 11 }, data: [{ id: 1, slug: 'adnan' }] } };
+
+    await request(app).get('/api/v1/presenters');
+    await flushBackground();
+    db.presenter.findMany.mockResolvedValue([{ id: 1, isFull: true, profile: { id: 1, slug: 'adnan' } }]);
+    db.presenter.count.mockResolvedValue(1);
+
+    const res = await request(app).get('/api/v1/presenters');
+
+    expect(db.presenter.deleteMany).not.toHaveBeenCalled();
+    expect(res.body.meta.total).toBe(1100);
   });
 
   it('fetches an author page from the website when Postgres holds only part of the archive', async () => {

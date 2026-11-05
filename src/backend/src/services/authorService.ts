@@ -131,16 +131,20 @@ async function fetchAuthorsPageFromWebsite(params: URLSearchParams, page: number
 
 /**
  * Re-syncs the whole author directory from the website into Postgres. Only a sync that stored every
- * page marks the directory complete, which lets list requests be answered from Postgres.
+ * page drops authors the website no longer lists and marks the directory complete, which lets list
+ * requests be answered from Postgres.
  */
 async function syncAuthorDirectory(): Promise<void> {
   let totalPages = 1;
+  const seenIds: number[] = [];
   for (let page = 1; page <= totalPages; page++) {
     if (page > DIRECTORY_SYNC_MAX_PAGES) return;
     const params = new URLSearchParams({ page: String(page), per_page: String(DIRECTORY_SYNC_PAGE_SIZE) });
     const result = await fetchAuthorsPageFromWebsite(params, page, DIRECTORY_SYNC_PAGE_SIZE);
+    seenIds.push(...result.data.map((item) => toInt(item?.id)).filter((id): id is number => id !== undefined));
     totalPages = result.meta.total_pages || 1;
   }
+  await prisma.author.deleteMany({ where: { id: { notIn: seenIds } } });
   await markSyncComplete(DIRECTORY_SYNC_KEY);
 }
 

@@ -88,16 +88,19 @@ async function fetchPresentersFromWebsite(
 
 /**
  * Re-syncs the full presenter roster (with bios, shows and articles) from the website into Postgres.
- * Only a sync that stored every page marks the roster complete, which lets list requests be answered
- * from Postgres.
+ * Only a sync that stored every page drops presenters the website no longer lists and marks the
+ * roster complete, which lets list requests be answered from Postgres.
  */
 async function syncPresenterRoster(): Promise<void> {
   let totalPages = 1;
+  const seenIds: number[] = [];
   for (let page = 1; page <= totalPages; page++) {
     if (page > ROSTER_SYNC_MAX_PAGES) return;
     const result = await fetchPresentersFromWebsite(page, ROSTER_SYNC_PAGE_SIZE, 'full');
+    seenIds.push(...result.items.map((item) => toInt(item?.id)).filter((id): id is number => id !== undefined));
     totalPages = result.totalPages || 1;
   }
+  await prisma.presenter.deleteMany({ where: { id: { notIn: seenIds } } });
   await markSyncComplete(ROSTER_SYNC_KEY);
 }
 
