@@ -107,9 +107,9 @@ export interface LiveStateDTO {
     radio: {
       is_live: boolean;
       stream_url: string;
-      show: string;
-      host: string;
-      ends_at: string;
+      show: string | null;
+      host: string | null;
+      ends_at: string | null;
     };
     youtube: {
       is_live: boolean;
@@ -196,16 +196,61 @@ export async function getScheduleNow(): Promise<ScheduleNowDTO> {
   }
 }
 
+const LIVE_STATE_CACHE_KEY = 'live:state';
+// Upstream /live is cached 30s (API doc section 7); never hold live state longer than that.
+const LIVE_STATE_TTL_SECONDS = 30;
+
+function nullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * Normalises a capitalfm/v1 `/live` payload (enveloped or bare) into LiveStateDTO.
+ * Every youtube key is always present (null when unset) so app models stay stable.
+ * Nothing is derived: `youtube.is_live` is exactly the upstream flag, never inferred from `video_id`,
+ * which can legitimately be null while live (channel embeds).
+ */
+export function normalizeLiveState(payload: any, nowIso: string = formatEatIsoString()): LiveStateDTO {
+  const body = payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object' ? payload.data : payload || {};
+  const radio = body.radio && typeof body.radio === 'object' ? body.radio : {};
+  const youtube = body.youtube && typeof body.youtube === 'object' ? body.youtube : {};
+
+  return {
+    meta: {
+      timezone: payload?.meta?.timezone || 'Africa/Nairobi',
+      generated_at: payload?.meta?.generated_at || nowIso,
+      api_version: payload?.meta?.api_version,
+    },
+    data: {
+      radio: {
+        is_live: radio.is_live === true,
+        stream_url: nullableString(radio.stream_url) || config.services.liveStreamPrimaryUrl,
+        show: radio.show ?? null,
+        host: radio.host ?? null,
+        ends_at: radio.ends_at ?? null,
+      },
+      youtube: {
+        is_live: youtube.is_live === true,
+        video_id: nullableString(youtube.video_id),
+        channel_id: nullableString(youtube.channel_id),
+        title: nullableString(youtube.title),
+        watch_url: nullableString(youtube.watch_url),
+        embed_url: nullableString(youtube.embed_url),
+      },
+      checked_at: body.checked_at || nowIso,
+    },
+  };
+}
+
 /**
  * Fetches concise real-time live radio & YouTube broadcast state (/live) from Capital FM Public API.
- * Cached in Redis for 30 seconds.
+ * Cached in Redis for 30 seconds, matching the upstream TTL, so a ~60s app poll stays cheap
+ * without serving a stale "Watch live" state.
  */
 export async function getLiveState(): Promise<LiveStateDTO> {
-  const cacheKey = 'live:state';
-
   if (redis.status === 'ready') {
     try {
-      const cached = await redis.get(cacheKey);
+      const cached = await redis.get(LIVE_STATE_CACHE_KEY);
       if (cached) {
         return JSON.parse(cached);
       }
@@ -215,15 +260,17 @@ export async function getLiveState(): Promise<LiveStateDTO> {
   const url = `${config.services.capitalFmApiBaseUrl}/live`;
 
   try {
-    const response = await fetch(url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timeoutId));
     if (!response.ok) {
       throw new Error(`Live state API returned status ${response.status}`);
     }
 
-    const payload = (await response.json()) as LiveStateDTO;
+    const payload = normalizeLiveState(await response.json());
 
     if (redis.status === 'ready') {
-      redis.setex(cacheKey, 30, JSON.stringify(payload)).catch(() => {});
+      redis.setex(LIVE_STATE_CACHE_KEY, LIVE_STATE_TTL_SECONDS, JSON.stringify(payload)).catch(() => {});
     }
 
     return payload;
@@ -231,8 +278,9 @@ export async function getLiveState(): Promise<LiveStateDTO> {
     logger.warn({ error, url }, 'Failed to fetch /live from Capital FM API. Returning fallback live state.');
     const nowIso = formatEatIsoString();
 
+    // Not cached: the next poll retries upstream. The Watch-live button stays hidden while upstream is down.
     return {
-      meta: { timezone: 'Africa/Nairobi', generated_at: nowIso, api_version: '2.2.0' },
+      meta: { timezone: 'Africa/Nairobi', generated_at: nowIso, api_version: '2.4.0' },
       data: {
         radio: {
           is_live: true,
