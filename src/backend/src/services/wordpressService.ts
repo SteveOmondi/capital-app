@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { stripHtml } from '../utils/htmlStripper';
+import { Prisma, Article as DbArticle } from '@prisma/client';
 import { prisma } from '../config/db';
 import { redis } from '../config/redis';
 import { logger } from '../middlewares/logger';
@@ -11,10 +12,13 @@ export interface AuthorDTO {
   bio?: string;
   avatarUrl?: string;
   archiveUrl?: string;
+  /** Upstream `/authors/{id}` record for this author (capitalfm/v1 `api_url`). */
+  apiUrl?: string;
   presenter?: {
     id?: number;
     slug?: string;
     name?: string;
+    api_url?: string;
   } | null;
 }
 
@@ -27,6 +31,8 @@ export interface ArticleDTO {
   categorySlug: string;
   author: string;
   authorDetails?: AuthorDTO;
+  /** Every author on the story, main author first, then co-authors. Use this for bylines. */
+  authors?: AuthorDTO[];
   coverImageUrl?: string;
   publishedAt: string;
   publishedAtTimestamp: number;
@@ -77,7 +83,7 @@ const DEFAULT_CATEGORIES: CategoryDTO[] = [
 /**
  * Parses author object from WordPress / Capital FM API response into AuthorDTO.
  */
-function parseAuthorDetails(rawAuthor: any, embeddedAuthor?: any): AuthorDTO {
+export function parseAuthorDetails(rawAuthor: any, embeddedAuthor?: any): AuthorDTO {
   const authorObj = typeof rawAuthor === 'object' && rawAuthor !== null ? rawAuthor : embeddedAuthor || {};
   const name = typeof rawAuthor === 'string'
     ? rawAuthor
@@ -87,8 +93,12 @@ function parseAuthorDetails(rawAuthor: any, embeddedAuthor?: any): AuthorDTO {
   const slug = authorObj.slug || authorObj.nicename || (id ? `author-${id}` : undefined);
   const rawBio = authorObj.bio || authorObj.description;
   const bio = rawBio ? stripHtml(rawBio) : undefined;
-  const avatarUrl = authorObj.photo || authorObj.avatar || authorObj.avatar_urls?.['96'] || authorObj.avatar_urls?.['48'] || undefined;
-  const archiveUrl = authorObj.archive_url || authorObj.url || authorObj.link || undefined;
+  const image = authorObj.image;
+  const imageUrl = typeof image === 'string' ? image : image?.url || image?.src;
+  const avatarUrl =
+    imageUrl || authorObj.avatarUrl || authorObj.photo || authorObj.avatar || authorObj.avatar_urls?.['96'] || authorObj.avatar_urls?.['48'] || undefined;
+  const archiveUrl = authorObj.archive_url || authorObj.archiveUrl || authorObj.url || authorObj.link || undefined;
+  const apiUrl = authorObj.api_url || authorObj.apiUrl || undefined;
   const presenter = authorObj.presenter || null;
 
   return {
@@ -98,14 +108,28 @@ function parseAuthorDetails(rawAuthor: any, embeddedAuthor?: any): AuthorDTO {
     bio,
     avatarUrl,
     archiveUrl,
+    apiUrl,
     presenter,
   };
 }
 
 /**
+ * Maps the capitalfm/v1 `authors[]` byline array (main author first, then co-authors).
+ * Falls back to the single main author when the upstream predates v2.4.0.
+ */
+function parseAuthorsList(item: any, mainAuthor: AuthorDTO): AuthorDTO[] {
+  if (Array.isArray(item.authors) && item.authors.length > 0) {
+    return item.authors
+      .filter((a: any) => a !== null && a !== undefined)
+      .map((a: any) => parseAuthorDetails(a));
+  }
+  return [mainAuthor];
+}
+
+/**
  * Transforms raw Capital FM API article JSON into ArticleDTO.
  */
-function transformApiArticle(item: any): ArticleDTO {
+export function transformApiArticle(item: any): ArticleDTO {
   const rawTitle = typeof item.title === 'object' ? item.title?.rendered || item.title?.text || '' : item.title || 'Untitled';
   const title = stripHtml(rawTitle);
 
@@ -125,6 +149,7 @@ function transformApiArticle(item: any): ArticleDTO {
   const embeddedAuthor = item._embedded && Array.isArray(item._embedded['author']) ? item._embedded['author'][0] : undefined;
   const authorDetails = parseAuthorDetails(item.author, embeddedAuthor);
   const authorName = authorDetails.name || 'Capital Digital';
+  const authors = parseAuthorsList(item, authorDetails);
   // capitalfm/v1 sends the post date as `published` (ISO 8601 with offset); the other keys cover wp/v2 and cached DTOs.
   const pubDateStr =
     item.published || item.published_at || item.publishedAt || (item.date_gmt ? `${item.date_gmt}Z` : undefined) || item.date;
@@ -144,6 +169,7 @@ function transformApiArticle(item: any): ArticleDTO {
     categorySlug,
     author: authorName,
     authorDetails,
+    authors,
     coverImageUrl,
     publishedAt: new Date(publishedAtTimestamp).toISOString(),
     publishedAtTimestamp,
@@ -169,10 +195,47 @@ function transformApiArticle(item: any): ArticleDTO {
 const articlesWithoutSourceDate = new WeakSet<ArticleDTO>();
 
 /**
+ * Byline columns for the articles table: the mapped authors[] plus flat id/slug arrays so an
+ * author's stories (co-written included) can be listed from Postgres.
+ */
+function bylineColumns(authors: AuthorDTO[] | undefined): {
+  authors?: Prisma.InputJsonValue;
+  authorIds?: number[];
+  authorSlugs?: string[];
+} {
+  if (!Array.isArray(authors) || authors.length === 0) return {};
+  return {
+    authors: JSON.parse(JSON.stringify(authors)) as Prisma.InputJsonValue,
+    authorIds: authors.map((a) => a.id).filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+    authorSlugs: authors.map((a) => a.slug).filter((slug): slug is string => typeof slug === 'string' && slug.length > 0),
+  };
+}
+
+/**
+ * Maps a Postgres article row back to ArticleDTO, restoring the stored byline when present.
+ */
+export function dbArticleToDTO(item: DbArticle): ArticleDTO {
+  const authors = Array.isArray(item.authors) ? (item.authors as unknown as AuthorDTO[]) : undefined;
+  return {
+    id: item.id,
+    slug: item.slug,
+    title: item.title,
+    excerpt: item.excerpt || item.title,
+    content: item.content,
+    categorySlug: item.categorySlug,
+    author: item.author || 'Capital Digital',
+    ...(authors && authors.length > 0 ? { authorDetails: authors[0], authors } : {}),
+    coverImageUrl: item.coverImageUrl || undefined,
+    publishedAt: item.publishedAt.toISOString(),
+    publishedAtTimestamp: item.publishedAt.getTime(),
+  };
+}
+
+/**
  * Syncs posts to PostgreSQL in background for Full-Text Search and local caching.
  * Updates existing entries if new content is fuller/longer, avoiding downgrading full articles to list summaries.
  */
-async function syncArticlesToPostgres(articles: ArticleDTO[], isFullContent: boolean = false): Promise<void> {
+export async function syncArticlesToPostgres(articles: ArticleDTO[], isFullContent: boolean = false): Promise<void> {
   if (!articles || articles.length === 0) return;
   try {
     for (const article of articles) {
@@ -186,6 +249,7 @@ async function syncArticlesToPostgres(articles: ArticleDTO[], isFullContent: boo
         author: article.author || 'Capital Digital',
         coverImageUrl: article.coverImageUrl || null,
         publishedAt: new Date(article.publishedAtTimestamp),
+        ...bylineColumns(article.authors),
       };
 
       const existing = await prisma.article.findUnique({
@@ -428,18 +492,7 @@ export async function getArticles(params: FetchArticlesQuery): Promise<{ article
     ]);
 
     if (total > 0) {
-      const articles: ArticleDTO[] = items.map((item) => ({
-        id: item.id,
-        slug: item.slug,
-        title: item.title,
-        excerpt: item.excerpt || item.title,
-        content: item.content,
-        categorySlug: item.categorySlug,
-        author: item.author || 'Capital Digital',
-        coverImageUrl: item.coverImageUrl || undefined,
-        publishedAt: item.publishedAt.toISOString(),
-        publishedAtTimestamp: item.publishedAt.getTime(),
-      }));
+      const articles: ArticleDTO[] = items.map(dbArticleToDTO);
 
       const result = { articles, total, page, limit };
 
@@ -585,18 +638,7 @@ export async function getArticleBySlug(idOrSlug: string): Promise<ArticleDTO | n
         dbArticle.content.length > (dbArticle.excerpt?.length || 0) + 30;
 
       if (isLikelyFullContent) {
-        const article: ArticleDTO = {
-          id: dbArticle.id,
-          slug: dbArticle.slug,
-          title: dbArticle.title,
-          excerpt: dbArticle.excerpt || dbArticle.title,
-          content: dbArticle.content,
-          categorySlug: dbArticle.categorySlug,
-          author: dbArticle.author || 'Capital Digital',
-          coverImageUrl: dbArticle.coverImageUrl || undefined,
-          publishedAt: dbArticle.publishedAt.toISOString(),
-          publishedAtTimestamp: dbArticle.publishedAt.getTime(),
-        };
+        const article: ArticleDTO = dbArticleToDTO(dbArticle);
 
         // Update Redis content and reset TTL to 900s (15 mins)
         if (redis.status === 'ready') {

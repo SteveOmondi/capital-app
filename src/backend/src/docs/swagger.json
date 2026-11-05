@@ -71,7 +71,7 @@
     "/api/v1/news": {
       "get": {
         "summary": "WordPress News Articles Gateway",
-        "description": "Returns sanitized news articles with category filtering, pagination, and PostgreSQL Full-Text Search.",
+        "description": "Returns sanitized news articles with category filtering, pagination, and PostgreSQL Full-Text Search. Each article carries `authors[]` (every author on the story, main author first, then co-authors; use it for the byline) alongside `authorDetails` (main author).",
         "parameters": [
           {
             "name": "category",
@@ -103,6 +103,226 @@
         "responses": {
           "200": {
             "description": "List of sanitized articles."
+          }
+        }
+      }
+    },
+    "/api/v1/authors": {
+      "get": {
+        "summary": "Authors with at least one published story",
+        "description": "Proxies Capital FM API v2.4.0 `/authors`. Includes co-authors. Each item: id, name, slug, image, story_count, latest_story, url, api_url, articles_url. Served from the gateway PostgreSQL store first and re-synced from the website in the background every 15 minutes, so it survives website downtime.",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Name or slug, partial"
+          },
+          {
+            "name": "orderby",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "stories",
+                "name",
+                "recent"
+              ]
+            },
+            "description": "stories (default), name, recent"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`data` is the author list; `meta` has total, total_pages, page, per_page."
+          }
+        }
+      }
+    },
+    "/api/v1/authors/{idOrSlug}": {
+      "get": {
+        "summary": "Author profile",
+        "description": "Proxies `/authors/{id-or-slug}`: list fields plus bio, website and presenter link (or null). Served from the gateway PostgreSQL store first and re-synced from the website in the background every 15 minutes, so it survives website downtime.",
+        "parameters": [
+          {
+            "name": "idOrSlug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Numeric WordPress ID or slug"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Author profile."
+          },
+          "404": {
+            "description": "No such author, or the author has no published story."
+          },
+          "502": {
+            "description": "Capital FM API unavailable."
+          }
+        }
+      }
+    },
+    "/api/v1/authors/{idOrSlug}/articles": {
+      "get": {
+        "summary": "An author's stories, co-written ones included",
+        "description": "Proxies `/authors/{id-or-slug}/articles`, newest first. Articles use the same shape as /api/v1/news, including the `authors[]` byline array. `data.author` carries the full profile so one call fills an author screen. Served from the gateway PostgreSQL store first and re-synced from the website in the background every 5 minutes, so it survives website downtime.",
+        "parameters": [
+          {
+            "name": "idOrSlug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Numeric WordPress ID or slug"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 50
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "summary",
+                "full"
+              ]
+            },
+            "description": "summary (default) or full"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`data.author` profile and `data.articles`; `meta` has total, total_pages, page, per_page."
+          },
+          "404": {
+            "description": "No such author."
+          },
+          "502": {
+            "description": "Capital FM API unavailable."
+          }
+        }
+      }
+    },
+    "/api/v1/presenters": {
+      "get": {
+        "summary": "On-air presenters",
+        "description": "Proxies `/presenters`. `fields=full` inlines bio, shows and articles. Served from the gateway PostgreSQL store first and re-synced from the website in the background every 15 minutes, so it survives website downtime.",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "summary",
+                "full"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Presenter list."
+          }
+        }
+      }
+    },
+    "/api/v1/presenters/{idOrSlug}": {
+      "get": {
+        "summary": "Full presenter profile",
+        "description": "Proxies `/presenters/{id-or-slug}`: profile, bio.html / bio.text, socials, shows[] with their slots, and articles[] when linked to a WordPress author. Served from the gateway PostgreSQL store first and re-synced from the website in the background every 15 minutes, so it survives website downtime.",
+        "parameters": [
+          {
+            "name": "idOrSlug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Presenter slug (e.g. anne-mwaura) or ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Presenter profile."
+          },
+          "404": {
+            "description": "No such presenter."
           }
         }
       }
@@ -184,7 +404,7 @@
     "/api/v1/live": {
       "get": {
         "summary": "Real-time Concise Live Radio & YouTube Broadcast State",
-        "description": "Returns current live show name, hosts, radio stream URL, ends_at timestamp, and active YouTube Live stream metadata.",
+        "description": "Proxies Capital FM `/live`: `data.radio` (is_live, stream_url, show, host, ends_at), `data.youtube` (is_live, video_id, channel_id, title, watch_url, embed_url) and `checked_at`. Every youtube key is always present (null when unset). Poll about every 60 seconds; cached 30 seconds to match the upstream. Show the Watch-live button only when `data.youtube.is_live` is true and open `data.youtube.watch_url` (or play `embed_url` in-app). Never gate the button on `video_id`, which can be null while live. The same block is also returned as `data.live` on /api/v1/stream/nowplaying.",
         "responses": {
           "200": {
             "description": "Real-time live broadcast state object containing radio show and YouTube live metadata."

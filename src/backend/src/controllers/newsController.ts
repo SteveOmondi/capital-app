@@ -1,5 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { getArticles, getNewsCategories, getTrendingArticles, getArticleBySlug } from '../services/wordpressService';
+import {
+  getArticles,
+  getNewsCategories,
+  getTrendingArticles,
+  getArticleBySlug,
+  parseAuthorDetails,
+} from '../services/wordpressService';
+import { getAuthorArticles } from '../services/authorService';
 
 export async function getNewsHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -21,15 +28,19 @@ export async function getNewsHandler(req: Request, res: Response, next: NextFunc
   }
 }
 
+/**
+ * Legacy author screen endpoint. Backed by the v2.4.0 `/authors/{id}/articles` upstream so
+ * co-written stories are included; the response shape is unchanged.
+ */
 export async function getAuthorHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { idOrSlug } = req.params;
     const page = req.query.page ? parseInt(String(req.query.page), 10) : 1;
     const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 10;
 
-    const data = await getArticles({ author: idOrSlug, page, limit });
+    const data = await getAuthorArticles(idOrSlug, { page, per_page: limit });
 
-    if (data.articles.length === 0) {
+    if (!data) {
       res.status(404).json({
         status: 'fail',
         message: `Author '${idOrSlug}' not found or has no published articles`,
@@ -37,20 +48,18 @@ export async function getAuthorHandler(req: Request, res: Response, next: NextFu
       return;
     }
 
-    const firstArticle = data.articles[0];
-    const authorProfile = firstArticle.authorDetails || {
-      name: firstArticle.author || idOrSlug,
-      slug: idOrSlug,
-    };
+    const authorProfile = data.author
+      ? parseAuthorDetails(data.author)
+      : data.articles[0]?.authorDetails || { name: idOrSlug, slug: idOrSlug };
 
     res.status(200).json({
       status: 'success',
       data: {
         author: authorProfile,
         articles: data.articles,
-        total: data.total,
-        page: data.page,
-        limit: data.limit,
+        total: data.meta.total,
+        page: data.meta.page,
+        limit: data.meta.per_page,
       },
     });
   } catch (error) {

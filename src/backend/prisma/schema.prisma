@@ -41,19 +41,57 @@ model UserFavorite {
 
 /// Cached and Indexed Articles for Near Realtime Full-Text Search
 model Article {
-  id           Int      @id // WordPress Post ID
-  slug         String   @unique
-  title        String
-  excerpt      String?
-  content      String   // Sanitized body text
-  categorySlug String   @map("category_slug")
-  author       String?
-  coverImageUrl String? @map("cover_image_url")
-  publishedAt  DateTime @map("published_at")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            Int      @id // WordPress Post ID
+  slug          String   @unique
+  title         String
+  excerpt       String?
+  content       String // Sanitized body text
+  categorySlug  String   @map("category_slug")
+  author        String?
+  /// Byline: every author on the story (main first, then co-authors), as mapped AuthorDTOs
+  authors       Json?
+  /// IDs / slugs of every author on the story, so co-written stories can be listed per author offline
+  authorIds     Int[]    @default([]) @map("author_ids")
+  authorSlugs   String[] @default([]) @map("author_slugs")
+  coverImageUrl String?  @map("cover_image_url")
+  publishedAt   DateTime @map("published_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@index([categorySlug])
   @@index([publishedAt])
+  @@index([authorIds], type: Gin)
+  @@index([authorSlugs], type: Gin)
   @@map("articles")
+}
+
+/// Author profiles served Postgres-first; re-synced from the website (/authors) in the background
+model Author {
+  id          Int       @id // WordPress user ID
+  slug        String    @unique
+  name        String
+  storyCount  Int       @default(0) @map("story_count")
+  latestStory DateTime? @map("latest_story")
+  profile     Json // Upstream author record as last returned
+  isFull      Boolean   @default(false) @map("is_full") // true once the single-author (full) record was stored
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@map("authors")
+}
+
+/// Presenter profiles served Postgres-first; re-synced from the website (/presenters) in the background
+model Presenter {
+  id        Int      @id // cfm_presenter post ID
+  slug      String   @unique
+  name      String
+  profile   Json // Upstream presenter record as last returned
+  sortOrder Int      @default(0) @map("sort_order") // Position in the website's presenter list
+  isFull    Boolean  @default(false) @map("is_full") // true once the single-presenter (full) record was stored
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@map("presenters")
 }
