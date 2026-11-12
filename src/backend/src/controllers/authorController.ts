@@ -5,7 +5,7 @@ import {
   getAuthorArticles,
   AuthorListQuery,
 } from '../services/authorService';
-import { withVideoFields } from '../services/wordpressService';
+import { toListingItem } from '../services/wordpressService';
 
 function parseIntParam(value: unknown): number | undefined {
   if (value === undefined) return undefined;
@@ -91,7 +91,7 @@ export async function getAuthorArticlesHandler(
       status: 'success',
       data: {
         author: result.author,
-        articles: result.articles.map(withVideoFields),
+        articles: result.articles.map(toListingItem),
       },
       meta: result.meta,
     });

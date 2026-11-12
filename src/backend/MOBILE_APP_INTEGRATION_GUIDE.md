@@ -83,19 +83,6 @@ This document provides complete API contracts, endpoint specifications, JSON DTO
           }
         ],
         "coverImageUrl": "https://www.capitalfm.africa/wp-content/uploads/2026/08/traffic.jpg",
-        "video": {
-          "provider": "youtube",
-          "id": "U9x-X1Un5sw",
-          "url": "https://youtu.be/U9x-X1Un5sw",
-          "watch_url": "https://www.youtube.com/watch?v=U9x-X1Un5sw",
-          "embed_url": "https://www.youtube.com/embed/U9x-X1Un5sw",
-          "thumbnail": {
-            "default": "https://i.ytimg.com/vi/U9x-X1Un5sw/hqdefault.jpg",
-            "medium": "https://i.ytimg.com/vi/U9x-X1Un5sw/mqdefault.jpg",
-            "max": "https://i.ytimg.com/vi/U9x-X1Un5sw/maxresdefault.jpg"
-          },
-          "is_short": false
-        },
         "isVideo": true,
         "publishedAt": "2026-08-26T14:30:00.000Z",
         "publishedAtTimestamp": 1787754600000
@@ -110,7 +97,25 @@ This document provides complete API contracts, endpoint specifications, JSON DTO
 
 > **Bylines:** a story can have more than one author. Render the byline from `authors[]` (main author first, then co-authors). `author` / `authorDetails` hold only the main author and stay for backward compatibility.
 
-> **Video stories:** every article in every news response (feed, search, trending, article detail, author stories and `/api/v1/videos`) carries `video` and `isVideo`. `video` is the story's YouTube video as the website sends it, or `null` when the story has none; `isVideo` is `true` exactly when `video` is not `null`. Render the story as a video story when `isVideo` is `true`: play `video.embed_url` in the app's YouTube player (or open `video.watch_url`), use a vertical layout when `video.is_short` is `true`, and use `coverImageUrl` as the card picture, falling back to `video.thumbnail.default`.
+> **Video stories:** every article in a news listing (this feed, search, trending and author stories) carries `isVideo`: `true` when the story has a YouTube video. The listing payload is otherwise unchanged. To play the video, open the story: the single article (`GET /api/v1/news/:idOrSlug`) and the `/api/v1/videos` endpoints (section 1.5) also carry `video`, the story's YouTube video as the website sends it, or `null` when it has none:
+>
+> ```json
+> "video": {
+>   "provider": "youtube",
+>   "id": "U9x-X1Un5sw",
+>   "url": "https://youtu.be/U9x-X1Un5sw",
+>   "watch_url": "https://www.youtube.com/watch?v=U9x-X1Un5sw",
+>   "embed_url": "https://www.youtube.com/embed/U9x-X1Un5sw",
+>   "thumbnail": {
+>     "default": "https://i.ytimg.com/vi/U9x-X1Un5sw/hqdefault.jpg",
+>     "medium": "https://i.ytimg.com/vi/U9x-X1Un5sw/mqdefault.jpg",
+>     "max": "https://i.ytimg.com/vi/U9x-X1Un5sw/maxresdefault.jpg"
+>   },
+>   "is_short": false
+> }
+> ```
+>
+> Play `video.embed_url` in the app's YouTube player (or open `video.watch_url`), use a vertical layout when `video.is_short` is `true`, and use `coverImageUrl` as the card picture, falling back to `video.thumbnail.default`.
 
 ### 1.3 Author Profile & Author Articles Page
 - **Endpoint**: `GET /api/v1/news/author/:idOrSlug`
@@ -280,7 +285,7 @@ Stories with a playable YouTube video (public or unlisted, embedding allowed), n
 - **Endpoint**: `GET /api/v1/videos/:idOrSlug` — accepts the YouTube video ID (e.g. `U9x-X1Un5sw`), the story ID or the story slug.
 - **Response**: `{ "status": "success", "data": { …article with full content, video, isVideo, alsoIn } }`. Returns `404` when there is no published story with a playable video for that ID or slug.
 
-> **Website downtime:** every story the gateway fetches is stored with its video. A single video story is answered from that store first and re-synced in the background every 5 minutes. The list is answered by the website (cached 5 minutes) and falls back to the stored video stories when the website is down; in that fallback, `section` matches a story's primary section only.
+> **Website downtime:** the videos are hosted on YouTube, not on the website, so the app can still play them while capitalfm.africa is down. Every story the gateway fetches is stored with its video. A single video story is answered from that store first and re-synced in the background every 5 minutes. The list is answered by the website (cached 5 minutes) and falls back to the stored video stories when the website is down. That offline list can differ from the website's: `section` matches a story's primary section slug only (no subcategories, no numeric IDs), and grouping into one entry per video (with `alsoIn`) and `total` cover only the newest 500 stored video stories, so a story the gateway has never fetched is missing.
 
 ---
 

@@ -176,6 +176,16 @@ export function withVideoFields<T extends object>(article: T): T & Pick<ArticleD
 }
 
 /**
+ * Shapes an article for a news listing (feed, search, trending, author stories): the listing payload
+ * is unchanged apart from the added `isVideo` flag. The `video` object itself is served on the
+ * single-article and /videos responses, where the app plays it.
+ */
+export function toListingItem<T extends object>(article: T): Omit<T, 'video'> & { isVideo: boolean } {
+  const { video, ...rest } = article as T & { video?: unknown };
+  return { ...rest, isVideo: parseVideo(video) !== null };
+}
+
+/**
  * Transforms raw Capital FM API article JSON into ArticleDTO.
  */
 export function transformApiArticle(item: any): ArticleDTO {

@@ -179,21 +179,68 @@ describe('Article video fields', () => {
   });
 });
 
-describe('News responses carry video and isVideo', () => {
+/** A listed story as the website sends it, with the optional fields the gateway maps. */
+function listedArticle(id: number, video: any) {
+  return rawArticle(id, video, {
+    image: { url: `https://capitalfm.africa/story-${id}.jpg` },
+    views: { total: 10, last_7_days: 4 },
+    word_count: 420,
+    reading_time_minutes: 2,
+    share: { whatsapp: `https://wa.me/?text=story-${id}` },
+  });
+}
+
+/**
+ * The news listing item fields the gateway returned before videos (see MOBILE_APP_INTEGRATION_GUIDE
+ * section 1.2) for listedArticle(): listings may only gain `isVideo`, never `video` or other fields.
+ */
+const PRE_VIDEO_LISTING_KEYS = [
+  'id',
+  'slug',
+  'title',
+  'excerpt',
+  'content',
+  'categorySlug',
+  'author',
+  'authorDetails',
+  'authors',
+  'coverImageUrl',
+  'publishedAt',
+  'publishedAtTimestamp',
+  'views',
+  'wordCount',
+  'readingTimeMinutes',
+  'share',
+];
+
+function expectListing(items: any[], expectedIsVideo: boolean[]) {
+  expect(items.map((a) => a.isVideo)).toEqual(expectedIsVideo);
+  for (const item of items) {
+    expect(Object.keys(item).sort()).toEqual([...PRE_VIDEO_LISTING_KEYS, 'isVideo'].sort());
+  }
+}
+
+describe('News listings keep their payload and only add isVideo', () => {
   it('GET /api/v1/news', async () => {
     routes['/articles?'] = {
-      body: { meta: { total: 2 }, data: [rawArticle(1, youtube('vid1')), rawArticle(2, null)] },
+      body: {
+        meta: { total: 2 },
+        data: [listedArticle(1, youtube('vid1')), listedArticle(2, null)],
+      },
     };
 
     const res = await request(app).get('/api/v1/news?limit=2');
 
     expect(res.status).toBe(200);
+    expectListing(res.body.data.articles, [true, false]);
     expect(res.body.data.articles[0]).toMatchObject({
       id: 1,
-      isVideo: true,
-      video: { id: 'vid1', embed_url: 'https://www.youtube.com/embed/vid1' },
+      coverImageUrl: 'https://capitalfm.africa/story-1.jpg',
+      views: { total: 10, last_7_days: 4 },
+      wordCount: 420,
+      readingTimeMinutes: 2,
     });
-    expect(res.body.data.articles[1]).toMatchObject({ id: 2, isVideo: false, video: null });
+    expect(Object.keys(res.body.data).sort()).toEqual(['articles', 'limit', 'page', 'total']);
   });
 
   it('GET /api/v1/news served from Postgres', async () => {
@@ -204,10 +251,48 @@ describe('News responses carry video and isVideo', () => {
     const res = await request(app).get('/api/v1/news?limit=2');
 
     expect(res.body.data.articles.map((a: any) => a.isVideo)).toEqual([true, false]);
-    expect(res.body.data.articles[0].video.id).toBe('vid1');
+    expect(res.body.data.articles.some((a: any) => 'video' in a)).toBe(false);
     await flushBackground();
   });
 
+  it('GET /api/v1/news/trending', async () => {
+    routes['/articles/trending'] = {
+      body: { data: [listedArticle(1, youtube('vid1')), listedArticle(2, null)] },
+    };
+
+    const res = await request(app).get('/api/v1/news/trending');
+
+    expectListing(res.body.data.articles, [true, false]);
+  });
+
+  it('GET /api/v1/authors/:idOrSlug/articles and legacy /news/author/:idOrSlug', async () => {
+    routes['/authors/jane-writer/articles'] = {
+      body: {
+        meta: { total: 2, total_pages: 1 },
+        data: [listedArticle(1, youtube('vid1')), listedArticle(2, null)],
+      },
+    };
+
+    const res = await request(app).get('/api/v1/authors/jane-writer/articles');
+    const legacy = await request(app).get('/api/v1/news/author/jane-writer');
+
+    expectListing(res.body.data.articles, [true, false]);
+    expectListing(legacy.body.data.articles, [true, false]);
+  });
+
+  it('GET /api/v1/search', async () => {
+    routes['/articles?'] = {
+      body: { meta: { total: 1 }, data: [listedArticle(1, youtube('vid1'))] },
+    };
+
+    const res = await request(app).get('/api/v1/search?q=story&type=news');
+
+    expect(res.status).toBe(200);
+    expectListing(res.body.data.news.articles, [true]);
+  });
+});
+
+describe('Single article carries video and isVideo', () => {
   it('GET /api/v1/news/:idOrSlug', async () => {
     routes['/articles/story-1'] = {
       body: { data: rawArticle(1, youtube('vid1'), { content: { html: FULL_BODY } }) },
@@ -219,45 +304,8 @@ describe('News responses carry video and isVideo', () => {
     const withVideo = await request(app).get('/api/v1/news/story-1');
     const without = await request(app).get('/api/v1/news/story-2');
 
-    expect(withVideo.body.data).toMatchObject({
-      isVideo: true,
-      video: { watch_url: 'https://www.youtube.com/watch?v=vid1' },
-    });
+    expect(withVideo.body.data).toMatchObject({ isVideo: true, video: youtube('vid1') });
     expect(without.body.data).toMatchObject({ isVideo: false, video: null });
-  });
-
-  it('GET /api/v1/news/trending', async () => {
-    routes['/articles/trending'] = {
-      body: { data: [rawArticle(1, youtube('vid1')), rawArticle(2, null)] },
-    };
-
-    const res = await request(app).get('/api/v1/news/trending');
-
-    expect(res.body.data.articles.map((a: any) => a.isVideo)).toEqual([true, false]);
-  });
-
-  it('GET /api/v1/authors/:idOrSlug/articles and legacy /news/author/:idOrSlug', async () => {
-    routes['/authors/jane-writer/articles'] = {
-      body: {
-        meta: { total: 2, total_pages: 1 },
-        data: [rawArticle(1, youtube('vid1')), rawArticle(2, null)],
-      },
-    };
-
-    const res = await request(app).get('/api/v1/authors/jane-writer/articles');
-    const legacy = await request(app).get('/api/v1/news/author/jane-writer');
-
-    expect(res.body.data.articles.map((a: any) => a.isVideo)).toEqual([true, false]);
-    expect(legacy.body.data.articles.map((a: any) => a.isVideo)).toEqual([true, false]);
-  });
-
-  it('GET /api/v1/search', async () => {
-    routes['/articles?'] = { body: { meta: { total: 1 }, data: [rawArticle(1, youtube('vid1'))] } };
-
-    const res = await request(app).get('/api/v1/search?q=story&type=news');
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.news.articles[0]).toMatchObject({ isVideo: true, video: { id: 'vid1' } });
   });
 });
 
