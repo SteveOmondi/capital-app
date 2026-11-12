@@ -170,7 +170,9 @@ export function parseVideo(raw: unknown): VideoDTO | null {
  * Ensures an article carries `video` (null when absent) and `isVideo`. Idempotent, so it also
  * upgrades article payloads cached before these fields existed.
  */
-export function withVideoFields<T extends object>(article: T): T & Pick<ArticleDTO, 'video' | 'isVideo'> {
+export function withVideoFields<T extends object>(
+  article: T,
+): T & Pick<ArticleDTO, 'video' | 'isVideo'> {
   const video = parseVideo((article as { video?: unknown }).video);
   return { ...article, video, isVideo: video !== null };
 }
@@ -180,7 +182,9 @@ export function withVideoFields<T extends object>(article: T): T & Pick<ArticleD
  * is unchanged apart from the added `isVideo` flag. The `video` object itself is served on the
  * single-article and /videos responses, where the app plays it.
  */
-export function toListingItem<T extends object>(article: T): Omit<T, 'video'> & { isVideo: boolean } {
+export function toListingItem<T extends object>(
+  article: T,
+): Omit<T, 'video'> & { isVideo: boolean } {
   const { video, ...rest } = article as T & { video?: unknown };
   return { ...rest, isVideo: parseVideo(video) !== null };
 }
