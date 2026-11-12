@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { performGlobalSearch } from '../services/searchService';
+import { withVideoFields } from '../services/wordpressService';
 
 export async function globalSearchHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -29,7 +30,7 @@ export async function globalSearchHandler(req: Request, res: Response, next: Nex
 
     res.status(200).json({
       status: 'success',
-      data,
+      data: { ...data, news: { ...data.news, articles: data.news.articles.map(withVideoFields) } },
     });
   } catch (error) {
     next(error);

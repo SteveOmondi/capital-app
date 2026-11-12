@@ -5,6 +5,7 @@ import {
   getTrendingArticles,
   getArticleBySlug,
   parseAuthorDetails,
+  withVideoFields,
 } from '../services/wordpressService';
 import { getAuthorArticles } from '../services/authorService';
 
@@ -21,7 +22,7 @@ export async function getNewsHandler(req: Request, res: Response, next: NextFunc
 
     res.status(200).json({
       status: 'success',
-      data,
+      data: { ...data, articles: data.articles.map(withVideoFields) },
     });
   } catch (error) {
     next(error);
@@ -56,7 +57,7 @@ export async function getAuthorHandler(req: Request, res: Response, next: NextFu
       status: 'success',
       data: {
         author: authorProfile,
-        articles: data.articles,
+        articles: data.articles.map(withVideoFields),
         total: data.meta.total,
         page: data.meta.page,
         limit: data.meta.per_page,
@@ -92,7 +93,7 @@ export async function getTrendingNewsHandler(req: Request, res: Response, next: 
       status: 'success',
       data: {
         total: articles.length,
-        articles,
+        articles: articles.map(withVideoFields),
       },
     });
   } catch (error) {
@@ -115,7 +116,7 @@ export async function getArticleDetailHandler(req: Request, res: Response, next:
 
     res.status(200).json({
       status: 'success',
-      data: article,
+      data: withVideoFields(article),
     });
   } catch (error) {
     next(error);

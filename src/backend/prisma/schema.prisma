@@ -54,6 +54,8 @@ model Article {
   authorIds     Int[]    @default([]) @map("author_ids")
   authorSlugs   String[] @default([]) @map("author_slugs")
   coverImageUrl String?  @map("cover_image_url")
+  /// The story's YouTube video as the website sends it (`video`), null when it has none
+  video         Json?
   publishedAt   DateTime @map("published_at")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")

@@ -71,7 +71,7 @@
     "/api/v1/news": {
       "get": {
         "summary": "WordPress News Articles Gateway",
-        "description": "Returns sanitized news articles with category filtering, pagination, and PostgreSQL Full-Text Search. Each article carries `authors[]` (every author on the story, main author first, then co-authors; use it for the byline) alongside `authorDetails` (main author).",
+        "description": "Returns sanitized news articles with category filtering, pagination, and PostgreSQL Full-Text Search. Each article carries `authors[]` (every author on the story, main author first, then co-authors; use it for the byline) alongside `authorDetails` (main author). Every article also carries `video` (the story's YouTube video from the website: provider, id, url, watch_url, embed_url, thumbnail {default, medium, max}, is_short; `null` when the story has none) and `isVideo` (true exactly when `video` is not null): render the story as a video story when `isVideo` is true and play `video.embed_url` in-app.",
         "parameters": [
           {
             "name": "category",
@@ -204,7 +204,7 @@
     "/api/v1/authors/{idOrSlug}/articles": {
       "get": {
         "summary": "An author's stories, co-written ones included",
-        "description": "Proxies `/authors/{id-or-slug}/articles`, newest first. Articles use the same shape as /api/v1/news, including the `authors[]` byline array. `data.author` carries the full profile so one call fills an author screen. Served from the gateway PostgreSQL store first and re-synced from the website in the background every 5 minutes, so it survives website downtime.",
+        "description": "Proxies `/authors/{id-or-slug}/articles`, newest first. Articles use the same shape as /api/v1/news, including the `authors[]` byline array and the `video` / `isVideo` fields. `data.author` carries the full profile so one call fills an author screen. Served from the gateway PostgreSQL store first and re-synced from the website in the background every 5 minutes, so it survives website downtime.",
         "parameters": [
           {
             "name": "idOrSlug",
@@ -268,6 +268,117 @@
           },
           "502": {
             "description": "Capital FM API unavailable."
+          }
+        }
+      }
+    },
+    "/api/v1/videos": {
+      "get": {
+        "summary": "Video stories (one entry per YouTube video)",
+        "description": "Proxies Capital FM `/videos`: stories with a playable YouTube video, newest first. A video used on several stories appears once, under its newest story; the others are in `alsoIn` ([{ id, slug, title, url, api_url }]). Items have the /api/v1/news article shape with `video` and `isVideo: true`. Cached 5 minutes; when the website is down, served from the stored video stories in the gateway PostgreSQL store (section then matches the primary section only).",
+        "parameters": [
+          {
+            "name": "section",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Category slug or ID, subcategories included (news, business, ...)"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Story title"
+          },
+          {
+            "name": "shorts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "true = Shorts only, false = no Shorts; omit for both"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "summary",
+                "full"
+              ],
+              "default": "summary"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 50
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 50
+            },
+            "description": "Alias for limit (same default and cap of 50); limit wins when both are sent"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`data` has articles, total, page, limit."
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{idOrSlug}": {
+      "get": {
+        "summary": "One video story",
+        "description": "Proxies Capital FM `/videos/{id}`: accepts the YouTube video ID, the story ID or the story slug and returns the story with full content, `video`, `isVideo` and `alsoIn`. Served from the gateway PostgreSQL store first and re-synced from the website in the background every 5 minutes, so it survives website downtime.",
+        "parameters": [
+          {
+            "name": "idOrSlug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "YouTube video ID, story ID or story slug"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`data` is the video story."
+          },
+          "404": {
+            "description": "No published story with a playable video matches that ID or slug (cfm_video_not_found)."
+          },
+          "502": {
+            "description": "Website unavailable and no stored copy."
           }
         }
       }
@@ -377,7 +488,7 @@
     "/api/v1/search": {
       "get": {
         "summary": "Global Multi-Category News & Podcast Search Gateway",
-        "description": "Performs concurrent full-text search across all news categories (News, Sports, Business, Lifestyle, Entertainment, etc.) and podcast audio episodes.",
+        "description": "Performs concurrent full-text search across all news categories (News, Sports, Business, Lifestyle, Entertainment, etc.) and podcast audio episodes. News results (`data.news.articles`) carry `video` and `isVideo` like /api/v1/news.",
         "parameters": [
           {
             "name": "q",
