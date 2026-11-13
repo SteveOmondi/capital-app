@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { stripHtml } from '../utils/htmlStripper';
+import { detectYouTubeVideo } from '../utils/youtubeDetector';
 import { Prisma, Article as DbArticle } from '@prisma/client';
 import { prisma } from '../config/db';
 import { redis } from '../config/redis';
@@ -25,6 +26,8 @@ export interface AuthorDTO {
 /**
  * The story's YouTube video as the capitalfm/v1 API sends it (`video` on every article, null when
  * there is none). Keys are kept exactly as upstream sends them, like the other nested upstream objects.
+ * When upstream has none but the story body embeds a YouTube video, the gateway builds the same shape
+ * from the body and marks it `source: "detected"`.
  */
 export interface VideoDTO {
   provider: string;
@@ -36,6 +39,8 @@ export interface VideoDTO {
   thumbnail?: { default?: string; medium?: string; max?: string };
   /** True for /shorts/ links: render in a vertical layout. */
   is_short: boolean;
+  /** "detected" when found in the story body rather than sent by the website; absent otherwise. */
+  source?: 'detected';
 }
 
 /** Another story that uses the same video (`also_in[]` on /videos items), as upstream sends it. */
@@ -59,7 +64,7 @@ export interface ArticleDTO {
   /** Every author on the story, main author first, then co-authors. Use this for bylines. */
   authors?: AuthorDTO[];
   coverImageUrl?: string;
-  /** The story's YouTube video, or null when it has none. */
+  /** The story's YouTube video (the website's, else one embedded in the body), or null when it has none. */
   video: VideoDTO | null;
   /** True when the story has a video (`video` is not null), so the app renders it as a video story. */
   isVideo: boolean;
@@ -166,6 +171,11 @@ export function parseVideo(raw: unknown): VideoDTO | null {
   return hasPlayableId || hasEmbed ? (video as unknown as VideoDTO) : null;
 }
 
+/** True for a video the gateway found in the story body (not one the website sent). */
+export function isDetectedVideo(video: unknown): boolean {
+  return parseVideo(video)?.source === 'detected';
+}
+
 /**
  * Ensures an article carries `video` (null when absent) and `isVideo`. Idempotent, so it also
  * upgrades article payloads cached before these fields existed.
@@ -221,7 +231,9 @@ export function transformApiArticle(item: any): ArticleDTO {
   // The response still needs a date, but a fallback "now" must never be persisted over the website's real date.
   const publishedAtTimestamp = hasSourceDate ? sourceTimestamp : Date.now();
 
-  const video = parseVideo(item.video);
+  // Upstream always wins; otherwise look for a YouTube video in the body (full payloads only).
+  const hasBody = typeof item.content === 'object' && item.content !== null && !!rawContent;
+  const video = parseVideo(item.video) ?? (hasBody ? detectYouTubeVideo(rawContent) : null);
   const categorySlug = item.primary_category?.slug || item.categorySlug || (Array.isArray(item.categories) && item.categories[0]?.slug) || 'news';
 
   const article: ArticleDTO = {
@@ -251,7 +263,43 @@ export function transformApiArticle(item: any): ArticleDTO {
   if (!hasSourceDate) {
     articlesWithoutSourceDate.add(article);
   }
+  if (!hasBody) {
+    articlesWithoutBody.add(article);
+  }
   return article;
+}
+
+/**
+ * Articles mapped from a payload without the story body (list items). Their `video` is only the
+ * website's, so a video detected earlier from the full body must not be cleared by them.
+ * Tracked out-of-band so the API response shape is unchanged.
+ */
+const articlesWithoutBody = new WeakSet<ArticleDTO>();
+
+/** Gives a body-less article the video detected earlier from its full body, when it has none of its own. */
+function adoptStoredDetectedVideo(article: ArticleDTO, storedVideo: unknown): void {
+  if (article.video || !articlesWithoutBody.has(article) || !isDetectedVideo(storedVideo)) return;
+  article.video = parseVideo(storedVideo);
+  article.isVideo = true;
+}
+
+/**
+ * Fills `video`/`isVideo` on body-less articles (e.g. trending lists) from the videos stored in
+ * Postgres when a full fetch detected one in the body. Leaves the articles unchanged on any failure.
+ */
+export async function applyStoredDetectedVideos(articles: ArticleDTO[]): Promise<void> {
+  const ids = articles.filter((a) => !a.video && articlesWithoutBody.has(a)).map((a) => a.id);
+  if (ids.length === 0) return;
+  try {
+    const rows = await prisma.article.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, video: true },
+    });
+    const stored = new Map((rows || []).map((row) => [row.id, row.video]));
+    for (const article of articles) adoptStoredDetectedVideo(article, stored.get(article.id));
+  } catch (error) {
+    logger.warn({ error }, 'Stored detected video lookup skipped or failed');
+  }
 }
 
 /**
@@ -313,6 +361,12 @@ export async function syncArticlesToPostgres(articles: ArticleDTO[], isFullConte
   if (!articles || articles.length === 0) return;
   try {
     for (const article of articles) {
+      const existing = await prisma.article.findUnique({
+        where: { id: article.id },
+      });
+      // A list item (no body) carries only the website's video: keep a video detected from the body.
+      if (existing) adoptStoredDetectedVideo(article, existing.video);
+
       const data = {
         id: article.id,
         slug: article.slug,
@@ -322,17 +376,13 @@ export async function syncArticlesToPostgres(articles: ArticleDTO[], isFullConte
         categorySlug: article.categorySlug,
         author: article.author || 'Capital Digital',
         coverImageUrl: article.coverImageUrl || null,
-        // Always written, so a video removed on the website is cleared here too.
+        // Always written, so a video removed on the website (or from the body) is cleared here too.
         video: article.video
           ? (JSON.parse(JSON.stringify(article.video)) as Prisma.InputJsonValue)
           : Prisma.DbNull,
         publishedAt: new Date(article.publishedAtTimestamp),
         ...bylineColumns(article.authors),
       };
-
-      const existing = await prisma.article.findUnique({
-        where: { id: article.id },
-      });
 
       if (!existing) {
         await prisma.article.create({ data });
@@ -628,6 +678,8 @@ export async function getTrendingArticles(days: number = 7, category?: string): 
     const rawItems = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : [];
 
     const articles = rawItems.map((item: any) => transformApiArticle(item));
+    // Trending items carry no body: take isVideo from a video detected earlier from the full story.
+    await applyStoredDetectedVideos(articles);
 
     if (redis.status === 'ready' && articles.length > 0) {
       redis.setex(cacheKey, 900, JSON.stringify(articles)).catch(() => {});

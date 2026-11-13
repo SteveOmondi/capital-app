@@ -17,6 +17,7 @@ import {
   VideoStoryRefDTO,
   dbArticleToDTO,
   hasFullContent,
+  isDetectedVideo,
   syncArticlesToPostgres,
   transformApiArticle,
 } from './wordpressService';
@@ -33,6 +34,10 @@ import {
  *   list first because the website's `section` filter includes subcategories and its one-entry-per-
  *   video grouping spans stories the gateway may not have stored.
  * Whatever is served from Redis or Postgres triggers a throttled background re-sync from the website.
+ *
+ * /videos is upstream-only: stored videos the gateway detected in a story body (`source: "detected"`)
+ * are never served, grouped or cleared here. They are filtered in code because a JSON-path
+ * "not equals" in SQL also drops rows whose video has no `source` key.
  */
 
 // Upstream cache guidance (API doc section 7): /videos/* 5 min.
@@ -72,6 +77,11 @@ function toStoryRef(row: Pick<DbArticle, 'id' | 'slug' | 'title'>): VideoStoryRe
 }
 
 const HAS_VIDEO: Prisma.ArticleWhereInput = { video: { not: Prisma.DbNull } };
+
+/** True for a stored row whose video came from the website (not detected in its body). */
+function hasUpstreamVideo(row: Pick<DbArticle, 'video'>): boolean {
+  return row.video !== null && !isDetectedVideo(row.video);
+}
 
 function sameVideo(videoId: string): Prisma.ArticleWhereInput {
   return { video: { path: ['id'], equals: videoId } };
@@ -157,7 +167,7 @@ async function readVideosFromPostgres(
     });
 
     const byVideo = new Map<string, ArticleDTO>();
-    for (const row of rows) {
+    for (const row of rows.filter(hasUpstreamVideo)) {
       const article = dbArticleToDTO(row);
       if (!article.video) continue;
       const primary = byVideo.get(article.video.id);
@@ -194,10 +204,11 @@ async function readVideoFromPostgres(
   idOrSlug: string,
 ): Promise<{ article: ArticleDTO; isFull: boolean } | null> {
   try {
-    const row = await prisma.article.findFirst({
+    const matches = await prisma.article.findMany({
       where: { AND: [HAS_VIDEO, videoLookup(idOrSlug)] },
       orderBy: { publishedAt: 'desc' },
     });
+    const row = matches.find(hasUpstreamVideo);
     if (!row) return null;
     const article = dbArticleToDTO(row);
     if (!article.video) return null;
@@ -205,10 +216,10 @@ async function readVideoFromPostgres(
     const others = await prisma.article.findMany({
       where: { AND: [sameVideo(article.video.id), { id: { not: row.id } }] },
       orderBy: { publishedAt: 'desc' },
-      select: { id: true, slug: true, title: true },
+      select: { id: true, slug: true, title: true, video: true },
     });
     return {
-      article: { ...article, alsoIn: others.map(toStoryRef) },
+      article: { ...article, alsoIn: others.filter(hasUpstreamVideo).map(toStoryRef) },
       isFull: hasFullContent(row),
     };
   } catch (dbError) {
@@ -278,10 +289,17 @@ export async function getVideoByIdOrSlug(idOrSlug: string): Promise<ArticleDTO |
       }
       // The website no longer has a playable video for this lookup: stop serving the stored one.
       deleteCache(cacheKey);
-      await prisma.article.updateMany({
+      const stale = await prisma.article.findMany({
         where: { AND: [HAS_VIDEO, videoLookup(idOrSlug)] },
-        data: { video: Prisma.DbNull },
+        select: { id: true, video: true },
       });
+      const ids = stale.filter(hasUpstreamVideo).map((row) => row.id);
+      if (ids.length > 0) {
+        await prisma.article.updateMany({
+          where: { id: { in: ids } },
+          data: { video: Prisma.DbNull },
+        });
+      }
     });
 
   const cached = await readCache<ArticleDTO>(cacheKey);
