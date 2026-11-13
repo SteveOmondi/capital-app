@@ -37,13 +37,14 @@ import {
  *
  * /videos is upstream-only: stored videos the gateway detected in a story body (`source: "detected"`)
  * are never served, grouped or cleared here. They are filtered in code because a JSON-path
- * "not equals" in SQL also drops rows whose video has no `source` key.
+ * "not equals" in SQL also drops rows whose video has no `source` key; the list fallback keeps
+ * reading batches so detected rows do not use up its scan limit.
  */
 
 // Upstream cache guidance (API doc section 7): /videos/* 5 min.
 const VIDEO_TTL_SECONDS = 300;
 const VIDEO_RESYNC_MS = VIDEO_TTL_SECONDS * 1000;
-// Downtime fallback: how many stored video stories are grouped into the one-entry-per-video list.
+// Downtime fallback: how many stored website video stories are grouped into the one-entry-per-video list.
 const FALLBACK_SCAN_LIMIT = 500;
 
 export interface VideoListQuery {
@@ -160,14 +161,20 @@ async function readVideosFromPostgres(
       filters.push({ video: { path: ['is_short'], equals: query.shorts } });
     }
 
-    const rows = await prisma.article.findMany({
-      where: { AND: filters },
-      orderBy: { publishedAt: 'desc' },
-      take: FALLBACK_SCAN_LIMIT,
-    });
+    const rows: DbArticle[] = [];
+    for (let skip = 0; rows.length < FALLBACK_SCAN_LIMIT; skip += FALLBACK_SCAN_LIMIT) {
+      const batch = await prisma.article.findMany({
+        where: { AND: filters },
+        orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: FALLBACK_SCAN_LIMIT,
+      });
+      rows.push(...batch.filter(hasUpstreamVideo));
+      if (batch.length < FALLBACK_SCAN_LIMIT) break;
+    }
 
     const byVideo = new Map<string, ArticleDTO>();
-    for (const row of rows.filter(hasUpstreamVideo)) {
+    for (const row of rows.slice(0, FALLBACK_SCAN_LIMIT)) {
       const article = dbArticleToDTO(row);
       if (!article.video) continue;
       const primary = byVideo.get(article.video.id);

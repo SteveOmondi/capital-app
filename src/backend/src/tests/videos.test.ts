@@ -634,6 +634,23 @@ describe('Videos detected in the story body', () => {
     expect(res.body.data.articles.map((a: any) => a.id)).toEqual([2]);
   });
 
+  it('do not use up the /videos Postgres fallback scan limit', async () => {
+    const stored = [
+      ...Array.from({ length: 400 }, (_, i) => storedRow(1000 - i, detectedVideo(`det${i}`))),
+      ...Array.from({ length: 200 }, (_, i) => storedRow(600 - i, youtube(`web${i}`))),
+    ];
+    db.article.findMany.mockImplementation(async ({ skip = 0, take }: any) =>
+      stored.slice(skip, take === undefined ? undefined : skip + take),
+    );
+    routes['/videos?'] = { status: 500, body: {} };
+
+    const res = await request(app).get('/api/v1/videos');
+
+    expect(res.body.data.total).toBe(200);
+    expect(res.body.data.articles[0].id).toBe(600);
+    await flushBackground();
+  });
+
   it('are not served or cleared by /videos/:idOrSlug', async () => {
     db.article.findMany.mockResolvedValue([storedRow(1, detectedVideo('det1aaaaaaa'), FULL_BODY)]);
     routes['/videos/story-1'] = { status: 404, body: { code: 'cfm_video_not_found' } };
