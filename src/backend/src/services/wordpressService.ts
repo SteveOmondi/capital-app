@@ -22,6 +22,31 @@ export interface AuthorDTO {
   } | null;
 }
 
+/**
+ * The story's YouTube video as the capitalfm/v1 API sends it (`video` on every article, null when
+ * there is none). Keys are kept exactly as upstream sends them, like the other nested upstream objects.
+ */
+export interface VideoDTO {
+  provider: string;
+  id: string;
+  /** The link as the editor pasted it. */
+  url?: string;
+  watch_url: string;
+  embed_url: string;
+  thumbnail?: { default?: string; medium?: string; max?: string };
+  /** True for /shorts/ links: render in a vertical layout. */
+  is_short: boolean;
+}
+
+/** Another story that uses the same video (`also_in[]` on /videos items), as upstream sends it. */
+export interface VideoStoryRefDTO {
+  id: number;
+  slug: string;
+  title: string;
+  url?: string;
+  api_url?: string;
+}
+
 export interface ArticleDTO {
   id: number;
   slug: string;
@@ -34,6 +59,12 @@ export interface ArticleDTO {
   /** Every author on the story, main author first, then co-authors. Use this for bylines. */
   authors?: AuthorDTO[];
   coverImageUrl?: string;
+  /** The story's YouTube video, or null when it has none. */
+  video: VideoDTO | null;
+  /** True when the story has a video (`video` is not null), so the app renders it as a video story. */
+  isVideo: boolean;
+  /** On /videos items only: other stories that use the same video. */
+  alsoIn?: VideoStoryRefDTO[];
   publishedAt: string;
   publishedAtTimestamp: number;
   views?: { total: number; last_7_days: number };
@@ -126,6 +157,38 @@ function parseAuthorsList(item: any, mainAuthor: AuthorDTO): AuthorDTO[] {
   return [mainAuthor];
 }
 
+/** Returns the upstream `video` object, or null when the story has no (usable) video. */
+export function parseVideo(raw: unknown): VideoDTO | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const video = raw as Record<string, unknown>;
+  const hasPlayableId = typeof video.id === 'string' && video.id.length > 0;
+  const hasEmbed = typeof video.embed_url === 'string' && video.embed_url.length > 0;
+  return hasPlayableId || hasEmbed ? (video as unknown as VideoDTO) : null;
+}
+
+/**
+ * Ensures an article carries `video` (null when absent) and `isVideo`. Idempotent, so it also
+ * upgrades article payloads cached before these fields existed.
+ */
+export function withVideoFields<T extends object>(
+  article: T,
+): T & Pick<ArticleDTO, 'video' | 'isVideo'> {
+  const video = parseVideo((article as { video?: unknown }).video);
+  return { ...article, video, isVideo: video !== null };
+}
+
+/**
+ * Shapes an article for a news listing (feed, search, trending, author stories): the listing payload
+ * is unchanged apart from the added `isVideo` flag. The `video` object itself is served on the
+ * single-article and /videos responses, where the app plays it.
+ */
+export function toListingItem<T extends object>(
+  article: T,
+): Omit<T, 'video'> & { isVideo: boolean } {
+  const { video, ...rest } = article as T & { video?: unknown };
+  return { ...rest, isVideo: parseVideo(video) !== null };
+}
+
 /**
  * Transforms raw Capital FM API article JSON into ArticleDTO.
  */
@@ -158,6 +221,7 @@ export function transformApiArticle(item: any): ArticleDTO {
   // The response still needs a date, but a fallback "now" must never be persisted over the website's real date.
   const publishedAtTimestamp = hasSourceDate ? sourceTimestamp : Date.now();
 
+  const video = parseVideo(item.video);
   const categorySlug = item.primary_category?.slug || item.categorySlug || (Array.isArray(item.categories) && item.categories[0]?.slug) || 'news';
 
   const article: ArticleDTO = {
@@ -171,6 +235,8 @@ export function transformApiArticle(item: any): ArticleDTO {
     authorDetails,
     authors,
     coverImageUrl,
+    video,
+    isVideo: video !== null,
     publishedAt: new Date(publishedAtTimestamp).toISOString(),
     publishedAtTimestamp,
     views: item.views,
@@ -221,6 +287,7 @@ export function hasFullContent(item: Pick<DbArticle, 'content' | 'excerpt'>): bo
  */
 export function dbArticleToDTO(item: DbArticle): ArticleDTO {
   const authors = Array.isArray(item.authors) ? (item.authors as unknown as AuthorDTO[]) : undefined;
+  const video = parseVideo(item.video);
   return {
     id: item.id,
     slug: item.slug,
@@ -231,6 +298,8 @@ export function dbArticleToDTO(item: DbArticle): ArticleDTO {
     author: item.author || 'Capital Digital',
     ...(authors && authors.length > 0 ? { authorDetails: authors[0], authors } : {}),
     coverImageUrl: item.coverImageUrl || undefined,
+    video,
+    isVideo: video !== null,
     publishedAt: item.publishedAt.toISOString(),
     publishedAtTimestamp: item.publishedAt.getTime(),
   };
@@ -253,6 +322,10 @@ export async function syncArticlesToPostgres(articles: ArticleDTO[], isFullConte
         categorySlug: article.categorySlug,
         author: article.author || 'Capital Digital',
         coverImageUrl: article.coverImageUrl || null,
+        // Always written, so a video removed on the website is cleared here too.
+        video: article.video
+          ? (JSON.parse(JSON.stringify(article.video)) as Prisma.InputJsonValue)
+          : Prisma.DbNull,
         publishedAt: new Date(article.publishedAtTimestamp),
         ...bylineColumns(article.authors),
       };

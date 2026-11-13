@@ -83,6 +83,7 @@ This document provides complete API contracts, endpoint specifications, JSON DTO
           }
         ],
         "coverImageUrl": "https://www.capitalfm.africa/wp-content/uploads/2026/08/traffic.jpg",
+        "isVideo": true,
         "publishedAt": "2026-08-26T14:30:00.000Z",
         "publishedAtTimestamp": 1787754600000
       }
@@ -95,6 +96,26 @@ This document provides complete API contracts, endpoint specifications, JSON DTO
 ```
 
 > **Bylines:** a story can have more than one author. Render the byline from `authors[]` (main author first, then co-authors). `author` / `authorDetails` hold only the main author and stay for backward compatibility.
+
+> **Video stories:** every article in a news listing (this feed, search, trending and author stories) carries `isVideo`: `true` when the story has a YouTube video. The listing payload is otherwise unchanged. To play the video, open the story: the single article (`GET /api/v1/news/:idOrSlug`) and the `/api/v1/videos` endpoints (section 1.5) also carry `video`, the story's YouTube video as the website sends it, or `null` when it has none:
+>
+> ```json
+> "video": {
+>   "provider": "youtube",
+>   "id": "U9x-X1Un5sw",
+>   "url": "https://youtu.be/U9x-X1Un5sw",
+>   "watch_url": "https://www.youtube.com/watch?v=U9x-X1Un5sw",
+>   "embed_url": "https://www.youtube.com/embed/U9x-X1Un5sw",
+>   "thumbnail": {
+>     "default": "https://i.ytimg.com/vi/U9x-X1Un5sw/hqdefault.jpg",
+>     "medium": "https://i.ytimg.com/vi/U9x-X1Un5sw/mqdefault.jpg",
+>     "max": "https://i.ytimg.com/vi/U9x-X1Un5sw/maxresdefault.jpg"
+>   },
+>   "is_short": false
+> }
+> ```
+>
+> Play `video.embed_url` in the app's YouTube player (or open `video.watch_url`), use a vertical layout when `video.is_short` is `true`, and use `coverImageUrl` as the card picture, falling back to `video.thumbnail.default`.
 
 ### 1.3 Author Profile & Author Articles Page
 - **Endpoint**: `GET /api/v1/news/author/:idOrSlug`
@@ -226,6 +247,45 @@ Every author with at least one published story (as main author **or** co-author)
   "meta": { "total": 1840, "total_pages": 184, "page": 1, "per_page": 10 }
 }
 ```
+
+### 1.5 🎬 Videos
+Stories with a playable YouTube video (public or unlisted, embedding allowed), newest first. A video used on several stories appears **once**, under its newest story; the other stories are listed in `alsoIn`.
+
+**List video stories**
+- **Endpoint**: `GET /api/v1/videos`
+- **Query Params**: `section` (category slug or ID, subcategories included, e.g. `news`, `business`), `search` (story title), `shorts` (`true` = Shorts only, `false` = no Shorts, omit for both), `fields` (`summary` default, or `full`), `page` (default: 1), `limit` (default: 10, max: 50; `per_page` is accepted as an alias with the same cap)
+- Items have the same shape as `/api/v1/news` articles (with `video` and `isVideo: true`), plus `alsoIn`: `[{ id, slug, title, url, api_url }]` for the other stories that use the same video.
+- **Response**:
+```json
+{
+  "status": "success",
+  "data": {
+    "articles": [
+      {
+        "id": 1447865,
+        "slug": "experts-kenya-needs-a-stable-tax-regime",
+        "title": "Experts: Kenya needs a stable tax regime",
+        "categorySlug": "news",
+        "video": { "provider": "youtube", "id": "qWq0fP-6b-0", "watch_url": "https://www.youtube.com/watch?v=qWq0fP-6b-0", "embed_url": "https://www.youtube.com/embed/qWq0fP-6b-0", "thumbnail": { "default": "https://i.ytimg.com/vi/qWq0fP-6b-0/hqdefault.jpg" }, "is_short": false },
+        "isVideo": true,
+        "alsoIn": [
+          { "id": 1447846, "slug": "kenya-must-curb-public-spending", "title": "Kenya must curb public spending", "url": "https://capitalfm.africa/kenya-must-curb-public-spending/", "api_url": "https://capitalfm.africa/wp-json/capitalfm/v1/articles/kenya-must-curb-public-spending" }
+        ],
+        "publishedAt": "2026-11-01T08:00:00.000Z"
+      }
+    ],
+    "total": 9,
+    "page": 1,
+    "limit": 10
+  }
+}
+```
+
+**One video story**
+- **Endpoint**: `GET /api/v1/videos/:idOrSlug` — accepts the YouTube video ID (e.g. `U9x-X1Un5sw`), the story ID or the story slug.
+- **Response**: `{ "status": "success", "data": { …article with full content, video, isVideo, alsoIn } }`. Returns `404` when there is no published story with a playable video for that ID or slug.
+
+> **Website downtime:** the videos are hosted on YouTube, not on the website, so the app can still play them while capitalfm.africa is down. Every story the gateway fetches is stored with its video. A single video story is answered from that store first and re-synced in the background every 5 minutes. The list is answered by the website (cached 5 minutes) and falls back to the stored video stories when the website is down. That offline list can differ from the website's: `section` matches a story's primary section slug only (no subcategories, no numeric IDs), and grouping into one entry per video (with `alsoIn`) and `total` cover only the newest 500 stored video stories, so a story the gateway has never fetched is missing.
 
 ---
 
