@@ -57,6 +57,12 @@ describe('detectYouTubeVideo: embedded players', () => {
     );
   });
 
+  it('picks the embed player over a video linked in its caption', () => {
+    const other = 'BBBBBBBBBBB';
+    const html = `${intro}<figure class="wp-block-embed is-provider-youtube"><div class="wp-block-embed__wrapper"><iframe src="https://www.youtube.com/embed/${ID}"></iframe></div><figcaption>Full interview: https://youtu.be/${other}</figcaption></figure>`;
+    expect(detectYouTubeVideo(html)).toMatchObject({ id: ID });
+  });
+
   it('detects the embed block comment with escaped JSON slashes', () => {
     const html = `<!-- wp:embed {"url":"https:\\/\\/youtu.be\\/${ID}","type":"video","providerNameSlug":"youtube"} -->\n<!-- /wp:embed -->`;
     expect(detectYouTubeVideo(html)).toMatchObject({ id: ID, url: `https://youtu.be/${ID}` });
@@ -142,6 +148,10 @@ describe('detectYouTubeVideo: false positives', () => {
     [
       'a channel link in an embed block',
       `<figure class="wp-block-embed"><div class="wp-block-embed__wrapper">https://www.youtube.com/@CapitalFMKenya</div></figure>`,
+    ],
+    [
+      'a YouTube link in the caption of a non-YouTube embed',
+      `<figure class="wp-block-embed is-provider-twitter"><div class="wp-block-embed__wrapper"><blockquote class="twitter-tweet"><p>Live now</p></blockquote></div><figcaption>Watch: https://youtu.be/${ID}</figcaption></figure>`,
     ],
     ['a non-YouTube player', `<iframe src="https://player.vimeo.com/video/123456"></iframe>`],
     [

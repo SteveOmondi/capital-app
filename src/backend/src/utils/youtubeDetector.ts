@@ -91,20 +91,20 @@ function iframeCandidates(html: string): Candidate[] {
   return found;
 }
 
-/** WordPress embed blocks: the rendered figure, the block comment, and the [embed] shortcode. */
+/**
+ * WordPress embed blocks given as source: the block comment and the [embed] shortcode. A rendered
+ * embed figure is covered by its iframe or by its wrapper's bare URL line; its caption is not.
+ */
 function embedBlockCandidates(html: string): Candidate[] {
   const found: Candidate[] = [];
   const containers = [
-    /<figure\b[^>]*\bclass\s*=\s*["'][^"']*\bwp-block-embed\b[^"']*["'][^>]*>([\s\S]*?)<\/figure>/gi,
     /<!--\s*wp:(?:core-)?embed(?:\/youtube)?\b([\s\S]*?)-->/gi,
     /\[embed\b[^\]]*\]([\s\S]*?)\[\/embed\]/gi,
   ];
   for (const container of containers) {
     for (let m = container.exec(html); m; m = container.exec(html)) {
       // Block comments carry JSON attributes, where slashes may be escaped (`https:\/\/youtu.be\/…`).
-      const inner = m[1].replace(/\\\//g, '/');
-      // The figure's own iframe (if any) is already counted; its wrapper may also hold the bare link.
-      const urls = inner.replace(/<[^>]+>/g, ' ').match(URL_IN_TEXT) ?? [];
+      const urls = m[1].replace(/\\\//g, '/').match(URL_IN_TEXT) ?? [];
       for (const url of urls) found.push({ index: m.index, url });
     }
   }

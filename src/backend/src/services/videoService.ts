@@ -36,9 +36,9 @@ import {
  * Whatever is served from Redis or Postgres triggers a throttled background re-sync from the website.
  *
  * /videos is upstream-only: stored videos the gateway detected in a story body (`source: "detected"`)
- * are never served, grouped or cleared here. They are filtered in code because a JSON-path
- * "not equals" in SQL also drops rows whose video has no `source` key; the list fallback keeps
- * reading batches so detected rows do not use up its scan limit.
+ * are never served, grouped or cleared here. The list fallback excludes them in raw SQL (`IS
+ * DISTINCT FROM`) before its scan limit; the other lookups filter them in code because a Prisma
+ * JSON-path "not equals" also drops rows whose video has no `source` key.
  */
 
 // Upstream cache guidance (API doc section 7): /videos/* 5 min.
@@ -154,27 +154,28 @@ async function readVideosFromPostgres(
   limit: number,
 ): Promise<VideoListResponseDTO | null> {
   try {
-    const filters: Prisma.ArticleWhereInput[] = [HAS_VIDEO];
-    if (query.section) filters.push({ categorySlug: query.section });
-    if (query.search) filters.push({ title: { contains: query.search, mode: 'insensitive' } });
+    const conditions = [
+      Prisma.sql`video IS NOT NULL`,
+      Prisma.sql`video->>'source' IS DISTINCT FROM 'detected'`,
+    ];
+    if (query.section) conditions.push(Prisma.sql`category_slug = ${query.section}`);
+    if (query.search) conditions.push(Prisma.sql`title ILIKE '%' || ${query.search} || '%'`);
     if (query.shorts !== undefined) {
-      filters.push({ video: { path: ['is_short'], equals: query.shorts } });
+      conditions.push(Prisma.sql`video->'is_short' = ${JSON.stringify(query.shorts)}::jsonb`);
     }
 
-    const rows: DbArticle[] = [];
-    for (let skip = 0; rows.length < FALLBACK_SCAN_LIMIT; skip += FALLBACK_SCAN_LIMIT) {
-      const batch = await prisma.article.findMany({
-        where: { AND: filters },
-        orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
-        skip,
-        take: FALLBACK_SCAN_LIMIT,
-      });
-      rows.push(...batch.filter(hasUpstreamVideo));
-      if (batch.length < FALLBACK_SCAN_LIMIT) break;
-    }
+    const rows = await prisma.$queryRaw<DbArticle[]>`
+      SELECT id, slug, title, excerpt, content, category_slug AS "categorySlug", author, authors,
+        author_ids AS "authorIds", author_slugs AS "authorSlugs",
+        cover_image_url AS "coverImageUrl", video, published_at AS "publishedAt",
+        created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM articles
+      WHERE ${Prisma.join(conditions, ' AND ')}
+      ORDER BY published_at DESC
+      LIMIT ${FALLBACK_SCAN_LIMIT}`;
 
     const byVideo = new Map<string, ArticleDTO>();
-    for (const row of rows.slice(0, FALLBACK_SCAN_LIMIT)) {
+    for (const row of rows) {
       const article = dbArticleToDTO(row);
       if (!article.video) continue;
       const primary = byVideo.get(article.video.id);

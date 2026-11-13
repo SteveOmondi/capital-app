@@ -20,7 +20,13 @@ jest.mock('../config/db', () => {
     deleteMany: jest.fn(),
   });
   return {
-    prisma: { article: model(), author: model(), presenter: model(), $disconnect: jest.fn() },
+    prisma: {
+      article: model(),
+      author: model(),
+      presenter: model(),
+      $queryRaw: jest.fn(),
+      $disconnect: jest.fn(),
+    },
   };
 });
 
@@ -46,6 +52,7 @@ function resetDb() {
     m.upsert.mockReset().mockResolvedValue({});
     m.deleteMany.mockReset().mockResolvedValue({ count: 0 });
   }
+  db.$queryRaw.mockReset().mockResolvedValue([]);
 }
 
 /** Lets setImmediate background re-syncs run. */
@@ -372,7 +379,7 @@ describe('GET /api/v1/videos', () => {
 
   it('serves stored video stories from Postgres, one entry per video, when the website is down', async () => {
     routes['/videos?'] = { status: 500, body: {} };
-    db.article.findMany.mockResolvedValue([
+    db.$queryRaw.mockResolvedValue([
       storedRow(9, youtube('shared')),
       storedRow(8, youtube('solo')),
       storedRow(7, youtube('shared')),
@@ -620,35 +627,6 @@ describe('Videos detected in the story body', () => {
 
     expectListing(trending.body.data.articles, [true, false]);
     expectListing(byAuthor.body.data.articles, [true, false]);
-  });
-
-  it('are not served by the /videos Postgres fallback', async () => {
-    db.article.findMany.mockResolvedValue([
-      storedRow(3, detectedVideo('det3aaaaaaa')),
-      storedRow(2, youtube('vid2')),
-    ]);
-    routes['/videos?'] = { status: 500, body: {} };
-
-    const res = await request(app).get('/api/v1/videos');
-
-    expect(res.body.data.articles.map((a: any) => a.id)).toEqual([2]);
-  });
-
-  it('do not use up the /videos Postgres fallback scan limit', async () => {
-    const stored = [
-      ...Array.from({ length: 400 }, (_, i) => storedRow(1000 - i, detectedVideo(`det${i}`))),
-      ...Array.from({ length: 200 }, (_, i) => storedRow(600 - i, youtube(`web${i}`))),
-    ];
-    db.article.findMany.mockImplementation(async ({ skip = 0, take }: any) =>
-      stored.slice(skip, take === undefined ? undefined : skip + take),
-    );
-    routes['/videos?'] = { status: 500, body: {} };
-
-    const res = await request(app).get('/api/v1/videos');
-
-    expect(res.body.data.total).toBe(200);
-    expect(res.body.data.articles[0].id).toBe(600);
-    await flushBackground();
   });
 
   it('are not served or cleared by /videos/:idOrSlug', async () => {
