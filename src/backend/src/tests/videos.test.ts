@@ -629,6 +629,20 @@ describe('Videos detected in the story body', () => {
     expectListing(byAuthor.body.data.articles, [true, false]);
   });
 
+  it('are not served by the /videos Postgres fallback', async () => {
+    db.$queryRaw.mockResolvedValue([
+      storedRow(3, detectedVideo('det3aaaaaaa')),
+      storedRow(2, youtube('vid2')),
+    ]);
+    routes['/videos?'] = { status: 500, body: {} };
+
+    const res = await request(app).get('/api/v1/videos');
+
+    expect(res.body.data.articles.map((a: any) => a.id)).toEqual([2]);
+    expect(res.body.data.total).toBe(1);
+    await flushBackground();
+  });
+
   it('are not served or cleared by /videos/:idOrSlug', async () => {
     db.article.findMany.mockResolvedValue([storedRow(1, detectedVideo('det1aaaaaaa'), FULL_BODY)]);
     routes['/videos/story-1'] = { status: 404, body: { code: 'cfm_video_not_found' } };

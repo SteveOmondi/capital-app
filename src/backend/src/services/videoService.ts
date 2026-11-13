@@ -37,8 +37,8 @@ import {
  *
  * /videos is upstream-only: stored videos the gateway detected in a story body (`source: "detected"`)
  * are never served, grouped or cleared here. The list fallback excludes them in raw SQL (`IS
- * DISTINCT FROM`) before its scan limit; the other lookups filter them in code because a Prisma
- * JSON-path "not equals" also drops rows whose video has no `source` key.
+ * DISTINCT FROM`) before its scan limit, and every lookup also filters them in code, because a
+ * Prisma JSON-path "not equals" also drops rows whose video has no `source` key.
  */
 
 // Upstream cache guidance (API doc section 7): /videos/* 5 min.
@@ -171,11 +171,11 @@ async function readVideosFromPostgres(
         created_at AS "createdAt", updated_at AS "updatedAt"
       FROM articles
       WHERE ${Prisma.join(conditions, ' AND ')}
-      ORDER BY published_at DESC
+      ORDER BY published_at DESC, id DESC
       LIMIT ${FALLBACK_SCAN_LIMIT}`;
 
     const byVideo = new Map<string, ArticleDTO>();
-    for (const row of rows) {
+    for (const row of rows.filter(hasUpstreamVideo)) {
       const article = dbArticleToDTO(row);
       if (!article.video) continue;
       const primary = byVideo.get(article.video.id);
