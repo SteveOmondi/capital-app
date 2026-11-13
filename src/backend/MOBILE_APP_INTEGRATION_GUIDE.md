@@ -116,6 +116,8 @@ This document provides complete API contracts, endpoint specifications, JSON DTO
 > ```
 >
 > Play `video.embed_url` in the app's YouTube player (or open `video.watch_url`), use a vertical layout when `video.is_short` is `true`, and use `coverImageUrl` as the card picture, falling back to `video.thumbnail.default`.
+>
+> **Detected videos:** the website fills `video` only when an editor pastes the link into the story's YouTube box. When that box is empty but the story body embeds a YouTube video (a YouTube player, a WordPress embed block, or a bare YouTube video link on its own line; not a link inside the text, and not a channel or playlist link), the gateway builds the same `video` object from the first such video in the body and adds `"source": "detected"`, so `isVideo` is `true` too. A video from the YouTube box always wins and has no `source` key. The body is only read when the full story is fetched, so a listing shows `isVideo: true` for such a story once the gateway has fetched it in full. Detected videos are not listed by `/api/v1/videos` (section 1.5), which carries only the website's videos.
 
 ### 1.3 Author Profile & Author Articles Page
 - **Endpoint**: `GET /api/v1/news/author/:idOrSlug`

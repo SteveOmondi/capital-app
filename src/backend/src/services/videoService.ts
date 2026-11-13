@@ -17,6 +17,7 @@ import {
   VideoStoryRefDTO,
   dbArticleToDTO,
   hasFullContent,
+  isDetectedVideo,
   syncArticlesToPostgres,
   transformApiArticle,
 } from './wordpressService';
@@ -33,12 +34,17 @@ import {
  *   list first because the website's `section` filter includes subcategories and its one-entry-per-
  *   video grouping spans stories the gateway may not have stored.
  * Whatever is served from Redis or Postgres triggers a throttled background re-sync from the website.
+ *
+ * /videos is upstream-only: stored videos the gateway detected in a story body (`source: "detected"`)
+ * are never served, grouped or cleared here. The list fallback excludes them in raw SQL (`IS
+ * DISTINCT FROM`) before its scan limit, and every lookup also filters them in code, because a
+ * Prisma JSON-path "not equals" also drops rows whose video has no `source` key.
  */
 
 // Upstream cache guidance (API doc section 7): /videos/* 5 min.
 const VIDEO_TTL_SECONDS = 300;
 const VIDEO_RESYNC_MS = VIDEO_TTL_SECONDS * 1000;
-// Downtime fallback: how many stored video stories are grouped into the one-entry-per-video list.
+// Downtime fallback: how many stored website video stories are grouped into the one-entry-per-video list.
 const FALLBACK_SCAN_LIMIT = 500;
 
 export interface VideoListQuery {
@@ -72,6 +78,11 @@ function toStoryRef(row: Pick<DbArticle, 'id' | 'slug' | 'title'>): VideoStoryRe
 }
 
 const HAS_VIDEO: Prisma.ArticleWhereInput = { video: { not: Prisma.DbNull } };
+
+/** True for a stored row whose video came from the website (not detected in its body). */
+function hasUpstreamVideo(row: Pick<DbArticle, 'video'>): boolean {
+  return row.video !== null && !isDetectedVideo(row.video);
+}
 
 function sameVideo(videoId: string): Prisma.ArticleWhereInput {
   return { video: { path: ['id'], equals: videoId } };
@@ -143,21 +154,28 @@ async function readVideosFromPostgres(
   limit: number,
 ): Promise<VideoListResponseDTO | null> {
   try {
-    const filters: Prisma.ArticleWhereInput[] = [HAS_VIDEO];
-    if (query.section) filters.push({ categorySlug: query.section });
-    if (query.search) filters.push({ title: { contains: query.search, mode: 'insensitive' } });
+    const conditions = [
+      Prisma.sql`video IS NOT NULL`,
+      Prisma.sql`video->>'source' IS DISTINCT FROM 'detected'`,
+    ];
+    if (query.section) conditions.push(Prisma.sql`category_slug = ${query.section}`);
+    if (query.search) conditions.push(Prisma.sql`title ILIKE '%' || ${query.search} || '%'`);
     if (query.shorts !== undefined) {
-      filters.push({ video: { path: ['is_short'], equals: query.shorts } });
+      conditions.push(Prisma.sql`video->'is_short' = ${JSON.stringify(query.shorts)}::jsonb`);
     }
 
-    const rows = await prisma.article.findMany({
-      where: { AND: filters },
-      orderBy: { publishedAt: 'desc' },
-      take: FALLBACK_SCAN_LIMIT,
-    });
+    const rows = await prisma.$queryRaw<DbArticle[]>`
+      SELECT id, slug, title, excerpt, content, category_slug AS "categorySlug", author, authors,
+        author_ids AS "authorIds", author_slugs AS "authorSlugs",
+        cover_image_url AS "coverImageUrl", video, published_at AS "publishedAt",
+        created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM articles
+      WHERE ${Prisma.join(conditions, ' AND ')}
+      ORDER BY published_at DESC, id DESC
+      LIMIT ${FALLBACK_SCAN_LIMIT}`;
 
     const byVideo = new Map<string, ArticleDTO>();
-    for (const row of rows) {
+    for (const row of rows.filter(hasUpstreamVideo)) {
       const article = dbArticleToDTO(row);
       if (!article.video) continue;
       const primary = byVideo.get(article.video.id);
@@ -194,10 +212,11 @@ async function readVideoFromPostgres(
   idOrSlug: string,
 ): Promise<{ article: ArticleDTO; isFull: boolean } | null> {
   try {
-    const row = await prisma.article.findFirst({
+    const matches = await prisma.article.findMany({
       where: { AND: [HAS_VIDEO, videoLookup(idOrSlug)] },
       orderBy: { publishedAt: 'desc' },
     });
+    const row = matches.find(hasUpstreamVideo);
     if (!row) return null;
     const article = dbArticleToDTO(row);
     if (!article.video) return null;
@@ -205,10 +224,10 @@ async function readVideoFromPostgres(
     const others = await prisma.article.findMany({
       where: { AND: [sameVideo(article.video.id), { id: { not: row.id } }] },
       orderBy: { publishedAt: 'desc' },
-      select: { id: true, slug: true, title: true },
+      select: { id: true, slug: true, title: true, video: true },
     });
     return {
-      article: { ...article, alsoIn: others.map(toStoryRef) },
+      article: { ...article, alsoIn: others.filter(hasUpstreamVideo).map(toStoryRef) },
       isFull: hasFullContent(row),
     };
   } catch (dbError) {
@@ -278,10 +297,17 @@ export async function getVideoByIdOrSlug(idOrSlug: string): Promise<ArticleDTO |
       }
       // The website no longer has a playable video for this lookup: stop serving the stored one.
       deleteCache(cacheKey);
-      await prisma.article.updateMany({
+      const stale = await prisma.article.findMany({
         where: { AND: [HAS_VIDEO, videoLookup(idOrSlug)] },
-        data: { video: Prisma.DbNull },
+        select: { id: true, video: true },
       });
+      const ids = stale.filter(hasUpstreamVideo).map((row) => row.id);
+      if (ids.length > 0) {
+        await prisma.article.updateMany({
+          where: { id: { in: ids } },
+          data: { video: Prisma.DbNull },
+        });
+      }
     });
 
   const cached = await readCache<ArticleDTO>(cacheKey);

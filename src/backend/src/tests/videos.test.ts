@@ -20,7 +20,13 @@ jest.mock('../config/db', () => {
     deleteMany: jest.fn(),
   });
   return {
-    prisma: { article: model(), author: model(), presenter: model(), $disconnect: jest.fn() },
+    prisma: {
+      article: model(),
+      author: model(),
+      presenter: model(),
+      $queryRaw: jest.fn(),
+      $disconnect: jest.fn(),
+    },
   };
 });
 
@@ -46,6 +52,7 @@ function resetDb() {
     m.upsert.mockReset().mockResolvedValue({});
     m.deleteMany.mockReset().mockResolvedValue({ count: 0 });
   }
+  db.$queryRaw.mockReset().mockResolvedValue([]);
 }
 
 /** Lets setImmediate background re-syncs run. */
@@ -372,7 +379,7 @@ describe('GET /api/v1/videos', () => {
 
   it('serves stored video stories from Postgres, one entry per video, when the website is down', async () => {
     routes['/videos?'] = { status: 500, body: {} };
-    db.article.findMany.mockResolvedValue([
+    db.$queryRaw.mockResolvedValue([
       storedRow(9, youtube('shared')),
       storedRow(8, youtube('solo')),
       storedRow(7, youtube('shared')),
@@ -446,8 +453,11 @@ describe('GET /api/v1/videos/:idOrSlug', () => {
   });
 
   it('answers from Postgres when the stored story has its full body, then re-syncs in the background', async () => {
-    db.article.findFirst.mockResolvedValue(storedRow(9, youtube('vid1'), FULL_BODY));
-    db.article.findMany.mockResolvedValue([{ id: 7, slug: 'story-7', title: 'Story 7' }]);
+    db.article.findMany
+      .mockResolvedValueOnce([storedRow(9, youtube('vid1'), FULL_BODY)])
+      .mockResolvedValueOnce([
+        { id: 7, slug: 'story-7', title: 'Story 7', video: youtube('vid1') },
+      ]);
     routes['/videos/vid1'] = {
       body: { data: rawArticle(9, youtube('vid1'), { content: { html: FULL_BODY } }) },
     };
@@ -467,25 +477,181 @@ describe('GET /api/v1/videos/:idOrSlug', () => {
   });
 
   it('clears the stored video when the background re-sync finds the website no longer has it', async () => {
-    db.article.findFirst.mockResolvedValue(storedRow(9, youtube('vid1'), FULL_BODY));
+    db.article.findMany.mockResolvedValue([storedRow(9, youtube('vid1'), FULL_BODY)]);
     routes['/videos/story-9'] = { status: 404, body: { code: 'cfm_video_not_found' } };
 
     await request(app).get('/api/v1/videos/story-9');
     await flushBackground();
 
-    expect(db.article.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { video: Prisma.DbNull } }),
-    );
+    expect(db.article.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [9] } },
+      data: { video: Prisma.DbNull },
+    });
   });
 
   it('serves a stored summary when the website is down', async () => {
-    db.article.findFirst.mockResolvedValue(storedRow(9, youtube('vid1')));
+    db.article.findMany.mockResolvedValueOnce([storedRow(9, youtube('vid1'))]);
     routes['/videos/9'] = { status: 500, body: {} };
 
     const res = await request(app).get('/api/v1/videos/9');
 
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ id: 9, isVideo: true });
-    expect(db.article.findFirst.mock.calls[0][0].where.AND[1]).toEqual({ id: 9 });
+    expect(db.article.findMany.mock.calls[0][0].where.AND[1]).toEqual({ id: 9 });
+  });
+});
+
+/** A video the gateway found in a story body, as it is stored and served. */
+function detectedVideo(id: string, url = `https://youtu.be/${id}`) {
+  return { ...youtube(id), url, source: 'detected' };
+}
+
+const EMBED_BODY = (id: string) =>
+  `${FULL_BODY}<figure class="wp-block-embed is-provider-youtube"><div class="wp-block-embed__wrapper"><iframe src="https://www.youtube.com/embed/${id}?feature=oembed"></iframe></div></figure>`;
+
+describe('Videos detected in the story body', () => {
+  it('fills video/isVideo on a full article whose website video is null, and stores it', async () => {
+    routes['/articles/story-1'] = {
+      body: {
+        data: rawArticle(1, null, {
+          content: { html: `${FULL_BODY}<p>https://youtu.be/det1aaaaaaa</p>` },
+        }),
+      },
+    };
+
+    const res = await request(app).get('/api/v1/news/story-1');
+
+    expect(res.body.data).toMatchObject({ isVideo: true, video: detectedVideo('det1aaaaaaa') });
+    expect(db.article.create.mock.calls[0][0].data.video).toEqual(detectedVideo('det1aaaaaaa'));
+  });
+
+  it('keeps the website video when the body embeds a different one', () => {
+    const article = transformApiArticle(
+      rawArticle(1, youtube('upstreamAAA'), { content: { html: EMBED_BODY('bodyvidBBBB') } }),
+    );
+
+    expect(article.video).toEqual(youtube('upstreamAAA'));
+    expect(article.video).not.toHaveProperty('source');
+  });
+
+  it('replaces a stored detected video with the website video once the editor fills the YouTube box', async () => {
+    db.article.findUnique.mockResolvedValue(
+      storedRow(1, detectedVideo('bodyvidBBBB'), EMBED_BODY('bodyvidBBBB')),
+    );
+    routes['/articles?'] = {
+      body: { meta: { total: 1 }, data: [listedArticle(1, youtube('upstreamAAA'))] },
+    };
+
+    await request(app).get('/api/v1/news?limit=1');
+
+    expect(db.article.update.mock.calls[0][0].data.video).toEqual(youtube('upstreamAAA'));
+  });
+
+  it('does not detect from text links or channel links in the body', () => {
+    const html = `${FULL_BODY}<p>Watch <a href="https://youtu.be/det1aaaaaaa">the interview</a>.</p><p>https://www.youtube.com/@CapitalFMKenya</p>`;
+    expect(transformApiArticle(rawArticle(1, null, { content: { html } }))).toMatchObject({
+      video: null,
+      isVideo: false,
+    });
+  });
+
+  it('clears a stored detected video when the full body no longer embeds it', async () => {
+    db.article.findUnique.mockResolvedValue(storedRow(1, detectedVideo('det1aaaaaaa'), FULL_BODY));
+    routes['/articles/story-1'] = {
+      body: { data: rawArticle(1, null, { content: { html: FULL_BODY } }) },
+    };
+
+    const res = await request(app).get('/api/v1/news/story-1');
+
+    expect(res.body.data).toMatchObject({ isVideo: false, video: null });
+    expect(db.article.update.mock.calls[0][0].data.video).toBe(Prisma.DbNull);
+  });
+
+  it('a listing from the website (no body) keeps the stored detected video and reports isVideo', async () => {
+    db.article.findUnique.mockImplementation(async ({ where }: any) =>
+      where.id === 1 ? storedRow(1, detectedVideo('det1aaaaaaa'), EMBED_BODY('det1aaaaaaa')) : null,
+    );
+    routes['/articles?'] = {
+      body: { meta: { total: 2 }, data: [listedArticle(1, null), listedArticle(2, null)] },
+    };
+
+    const res = await request(app).get('/api/v1/news?limit=2');
+
+    expectListing(res.body.data.articles, [true, false]);
+    expect(db.article.update.mock.calls[0][0].data.video).toEqual(detectedVideo('det1aaaaaaa'));
+    expect(db.article.create.mock.calls[0][0].data.video).toBe(Prisma.DbNull);
+  });
+
+  it('a listing still clears a stored website video the website has removed', async () => {
+    db.article.findUnique.mockResolvedValue(storedRow(1, youtube('upstreamAAA')));
+    routes['/articles?'] = { body: { meta: { total: 1 }, data: [listedArticle(1, null)] } };
+
+    const res = await request(app).get('/api/v1/news?limit=1');
+
+    expectListing(res.body.data.articles, [false]);
+    expect(db.article.update.mock.calls[0][0].data.video).toBe(Prisma.DbNull);
+  });
+
+  it('a listing served from Postgres reads the stored detected flag', async () => {
+    db.article.findMany.mockResolvedValue([
+      storedRow(1, detectedVideo('det1aaaaaaa')),
+      storedRow(2, null),
+    ]);
+    db.article.count.mockResolvedValue(2);
+    routes['/articles?'] = { body: { meta: { total: 0 }, data: [] } };
+
+    const res = await request(app).get('/api/v1/news?limit=2');
+
+    expect(res.body.data.articles.map((a: any) => a.isVideo)).toEqual([true, false]);
+    expect(res.body.data.articles.some((a: any) => 'video' in a)).toBe(false);
+    await flushBackground();
+  });
+
+  it('trending and author listings read the stored detected flag', async () => {
+    db.article.findMany.mockResolvedValue([{ id: 1, video: detectedVideo('det1aaaaaaa') }]);
+    db.article.findUnique.mockImplementation(async ({ where }: any) =>
+      where.id === 1 ? storedRow(1, detectedVideo('det1aaaaaaa'), EMBED_BODY('det1aaaaaaa')) : null,
+    );
+    routes['/articles/trending'] = {
+      body: { data: [listedArticle(1, null), listedArticle(2, null)] },
+    };
+    routes['/authors/jane-writer/articles'] = {
+      body: {
+        meta: { total: 2, total_pages: 1 },
+        data: [listedArticle(1, null), listedArticle(2, null)],
+      },
+    };
+
+    const trending = await request(app).get('/api/v1/news/trending');
+    const byAuthor = await request(app).get('/api/v1/authors/jane-writer/articles');
+
+    expectListing(trending.body.data.articles, [true, false]);
+    expectListing(byAuthor.body.data.articles, [true, false]);
+  });
+
+  it('are not served by the /videos Postgres fallback', async () => {
+    db.$queryRaw.mockResolvedValue([
+      storedRow(3, detectedVideo('det3aaaaaaa')),
+      storedRow(2, youtube('vid2')),
+    ]);
+    routes['/videos?'] = { status: 500, body: {} };
+
+    const res = await request(app).get('/api/v1/videos');
+
+    expect(res.body.data.articles.map((a: any) => a.id)).toEqual([2]);
+    expect(res.body.data.total).toBe(1);
+    await flushBackground();
+  });
+
+  it('are not served or cleared by /videos/:idOrSlug', async () => {
+    db.article.findMany.mockResolvedValue([storedRow(1, detectedVideo('det1aaaaaaa'), FULL_BODY)]);
+    routes['/videos/story-1'] = { status: 404, body: { code: 'cfm_video_not_found' } };
+
+    const res = await request(app).get('/api/v1/videos/story-1');
+    await flushBackground();
+
+    expect(res.status).toBe(404);
+    expect(fetchMock.mock.calls.map((c) => String(c[0]))).toEqual([`${BASE}/videos/story-1`]);
+    expect(db.article.updateMany).not.toHaveBeenCalled();
   });
 });

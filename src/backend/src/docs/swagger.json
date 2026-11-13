@@ -110,7 +110,7 @@
     "/api/v1/news/{idOrSlug}": {
       "get": {
         "summary": "One news article",
-        "description": "Returns one article by WordPress ID or slug, with full content, `authors[]`, `video` (the story's YouTube video from the website: provider, id, url, watch_url, embed_url, thumbnail {default, medium, max}, is_short; `null` when the story has none) and `isVideo` (true exactly when `video` is not null). Play `video.embed_url` in-app.",
+        "description": "Returns one article by WordPress ID or slug, with full content, `authors[]`, `video` (the story's YouTube video from the website: provider, id, url, watch_url, embed_url, thumbnail {default, medium, max}, is_short; `null` when the story has none) and `isVideo` (true exactly when `video` is not null). When the YouTube box is empty but the body embeds a YouTube video (player, WordPress embed block, or a bare video link on its own line; not text links, channels or playlists), `video` is built from the body in the same shape plus `source: \"detected\"`; the website's video always wins and has no `source`. Listings report `isVideo` for detected videos once the full story has been fetched. Play `video.embed_url` in-app.",
         "parameters": [
           {
             "name": "idOrSlug",
@@ -300,7 +300,7 @@
     "/api/v1/videos": {
       "get": {
         "summary": "Video stories (one entry per YouTube video)",
-        "description": "Proxies Capital FM `/videos`: stories with a playable YouTube video, newest first. A video used on several stories appears once, under its newest story; the others are in `alsoIn` ([{ id, slug, title, url, api_url }]). Items have the /api/v1/news article shape with `video` and `isVideo: true`. Cached 5 minutes; when the website is down, served from the stored video stories in the gateway PostgreSQL store (the videos are hosted on YouTube, so they still play). That offline list can differ from the website's: section matches the primary section slug only (no subcategories or numeric IDs), and grouping, alsoIn and total cover only the newest 500 stored video stories.",
+        "description": "Proxies Capital FM `/videos`: stories with a playable YouTube video, newest first. A video used on several stories appears once, under its newest story; the others are in `alsoIn` ([{ id, slug, title, url, api_url }]). Items have the /api/v1/news article shape with `video` and `isVideo: true`. Only the website's videos are listed, never ones the gateway detected in a story body (`source: \"detected\"`). Cached 5 minutes; when the website is down, served from the stored video stories in the gateway PostgreSQL store (the videos are hosted on YouTube, so they still play). That offline list can differ from the website's: section matches the primary section slug only (no subcategories or numeric IDs), and grouping, alsoIn and total cover only the newest 500 stored video stories.",
         "parameters": [
           {
             "name": "section",
